@@ -11,6 +11,7 @@ Guide for AI coding agents working in this repo. Human-facing docs live in the R
 | `things3pp` (npm) | `packages/cli` | The CLI users install: local MCP server (`things3pp mcp …`, stdio + Tailscale HTTP), and the Mac side of the hosted app (`connect`, `agent`, `cloud deploy`). Bundles core and ships the prebuilt Worker. |
 | `things3pp-core` (private) | `packages/core` | Shared, consumed as TypeScript source: Things bridge (JXA, SQLite reader, relay actions), the snapshot data model + list rules, the MCP tool definitions and the MCP App view. |
 | `things3pp-mac` (private) | `packages/mac` | Native menu-bar app (Swift/SwiftUI): sign-in, guided permissions, and the relay to the hosted Things. The recommended way to connect a Mac. Built with `scripts/build-app.sh`. |
+| `things3pp-site` (private) | `packages/site` | The landing page (things3pp.paulashraf.com): static HTML/CSS, an assets-only Worker deployed with `cf deploy`. Screenshots in `public/shots` are of our own web app in `?demo` mode. |
 | `things3pp-cloud` (private) | `packages/cloud` | Cloudflare Worker + Durable Objects (remote MCP with OAuth, passkeys, Mac relay) and the Preact web app. Built with the `cf` CLI. |
 
 ## Commands
@@ -31,6 +32,10 @@ node packages/cli/dist/index.js doctor   # after build
 # packages/mac (Xcode 16+)
 swift build && swift test          # what pnpm typecheck / test run
 scripts/build-app.sh [--dmg]       # dist/things3pp.app (ad-hoc signed unless SIGN_IDENTITY is set)
+
+# packages/site (landing page)
+npx cf dev            # preview
+npx cf deploy         # publish (needs `cf auth login`)
 
 # packages/cloud
 npx cf dev            # Worker + web app locally (reads SETUP_KEY from .dev.vars)
