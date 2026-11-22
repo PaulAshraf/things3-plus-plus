@@ -2,8 +2,8 @@
 // Cloudflare CLI (`cf`). Ships a prebuilt Worker inside this package, so nothing is built here.
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configDir } from "../config.js";
 import { c, fail, info, ok, warn } from "../cli/ui.js";
@@ -23,7 +23,7 @@ function which(cmd: string): Promise<string | null> {
 
 function capture(cmd: string, args: string[], cwd?: string): Promise<{ code: number; out: string }> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd, timeout: 60_000 }, (err, stdout, stderr) =>
+    execFile(cmd, args, { cwd, timeout: 180_000 }, (err, stdout, stderr) =>
       resolve({ code: err ? ((err as { code?: number }).code ?? 1) : 0, out: `${stdout}${stderr}` }),
     );
   });
@@ -46,20 +46,39 @@ function stream(cmd: string, args: string[], cwd: string): Promise<{ code: numbe
   });
 }
 
-export async function deploy(): Promise<number> {
+const HOST_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+export async function deploy(opts: { domain?: string } = {}): Promise<number> {
   const build = bundledBuild();
   if (!build) {
     fail("This copy of things3pp doesn't include the hosted app. Reinstall it with: npm install -g things3pp");
     return 1;
   }
 
-  const cf = await which("cf");
-  if (!cf) {
+  // Run the cf version that built this Worker (via npx); an installed cf is only used if it's that version.
+  const wanted = (() => {
+    try {
+      return readFileSync(join(dirname(build), "cf-version.txt"), "utf8").trim();
+    } catch {
+      return null;
+    }
+  })();
+  const installed = await which("cf");
+  const installedVersion = installed ? (await capture(installed, ["--version"])).out.trim() : null;
+  const npx = join(dirname(process.execPath), "npx");
+  let cf: string;
+  let cfArgs: string[] = [];
+  if (installed && (!wanted || installedVersion === wanted)) cf = installed;
+  else if (wanted && existsSync(npx)) {
+    cf = npx;
+    cfArgs = ["-y", `cf@${wanted}`];
+    info(`Using cf ${wanted} (the version this Worker was built with)${installedVersion ? `; you have ${installedVersion}` : ""}.`);
+  } else {
     fail("The Cloudflare CLI (cf) isn't installed.");
-    console.log(`  Install it with ${c.cyan("npm install -g cf")}, sign in with ${c.cyan("cf auth login")}, then run this again.`);
+    console.log(`  Install it with ${c.cyan(`npm install -g cf${wanted ? `@${wanted}` : ""}`)}, sign in with ${c.cyan("cf auth login")}, then run this again.`);
     return 1;
   }
-  const who = await capture(cf, ["auth", "whoami"]);
+  const who = await capture(cf, [...cfArgs, "auth", "whoami"]);
   if (!/"authenticated":\s*true/.test(who.out)) {
     fail(`You're not signed in to Cloudflare. Run ${c.cyan("cf auth login")}, then try again.`);
     return 1;
@@ -74,6 +93,19 @@ export async function deploy(): Promise<number> {
   writeFileSync(join(project, "package.json"), `${JSON.stringify({ name: "things3pp-cloud-deploy", private: true, type: "module" }, null, 2)}\n`);
 
   const cfg = loadCloudConfig();
+  // A custom domain (on a zone in your Cloudflare account) also works on networks that block workers.dev.
+  const domain = (opts.domain ?? cfg.domain)?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (domain && !HOST_RE.test(domain)) {
+    fail(`"${domain}" isn't a valid hostname. Use something like things.example.com.`);
+    return 1;
+  }
+  if (domain) {
+    const workerConfig = join(project, ".cloudflare", "output", "v1", "workers", "default", "worker.config.json");
+    const wc = JSON.parse(readFileSync(workerConfig, "utf8")) as { domains?: string[] };
+    wc.domains = [domain];
+    writeFileSync(workerConfig, `${JSON.stringify(wc, null, 1)}\n`);
+    info(`Also serving it at https://${domain}`);
+  }
   const alreadyOwned = Boolean(cfg.device?.deviceId);
   const setupKey = cfg.setupKey ?? `t3pp_setup_${randomBytes(24).toString("base64url")}`;
   const secretsFile = join(project, ".secrets.json");
@@ -83,7 +115,7 @@ export async function deploy(): Promise<number> {
   info("Deploying with cf (this takes a minute the first time)…\n");
   let res: { code: number; out: string };
   try {
-    res = await stream(cf, ["deploy", "--prebuilt", "--mode", "production", "--secrets-file", secretsFile, "--message", "things3pp cloud deploy"], project);
+    res = await stream(cf, [...cfArgs, "deploy", "--prebuilt", "--mode", "production", "--secrets-file", secretsFile, "--message", "things3pp cloud deploy"], project);
   } finally {
     rmSync(secretsFile, { force: true });
   }
@@ -92,9 +124,11 @@ export async function deploy(): Promise<number> {
     return 1;
   }
 
-  const url = /https:\/\/[a-z0-9.-]+\.workers\.dev/i.exec(res.out)?.[0];
+  const url = domain ? `https://${domain}` : /https:\/\/[a-z0-9.-]+\.workers\.dev/i.exec(res.out)?.[0];
   const fresh = loadCloudConfig();
   if (!alreadyOwned) fresh.setupKey = setupKey;
+  if (domain) fresh.domain = domain;
+  // Moving to a new address: the passkey is bound to the hostname, and the Mac's link stays valid.
   if (url) fresh.url = url;
   saveCloudConfig(fresh);
 

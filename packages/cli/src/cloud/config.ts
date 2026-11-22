@@ -12,6 +12,8 @@ export interface CloudConfig {
   /** Lets this Mac claim a fresh deployment. Set by `things3pp cloud deploy`. */
   setupKey?: string;
   workerName?: string;
+  /** Custom domain the Worker is also served on (set with `cloud deploy --domain`). */
+  domain?: string;
   device?: {
     name: string;
     /** PKCS#8 PEM. Never leaves this Mac. */

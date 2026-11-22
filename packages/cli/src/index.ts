@@ -31,6 +31,8 @@ const CLOUD_HELP = `things3pp cloud — your own hosted Things, on your Cloudfla
 
 Usage
   things3pp cloud deploy     Deploy the web app + remote MCP server with the Cloudflare CLI (cf)
+      --domain <host>            Also serve it on a custom domain from your Cloudflare account
+                                 (e.g. things.example.com; remembered for later deploys)
   things3pp cloud status     Show the linked web address and whether this Mac is connected
   things3pp cloud open       Open your hosted Things in the browser
 
@@ -111,9 +113,9 @@ async function cloud(argv: string[]): Promise<number> {
     return 0;
   }
   if (command === "deploy") {
-    parseArgs({ args: rest, options: {} });
+    const { values } = parseArgs({ args: rest, options: { domain: { type: "string" } } });
     const { deploy } = await import("./cloud/deploy.js");
-    return deploy();
+    return deploy({ domain: values.domain });
   }
   if (command === "status") {
     const { status } = await import("./cloud/status.js");

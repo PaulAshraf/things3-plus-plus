@@ -1,7 +1,7 @@
 // Bundles the CLI (with things3pp-core inlined) into dist/, and copies the files it reads at runtime:
 // the osascript bridges, the MCP App view, and (when built) the hosted Worker for `things3pp cloud deploy`.
 import { build } from "esbuild";
-import { chmod, copyFile, cp, mkdir, readFile, rm } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,7 +41,12 @@ await copyFile(view, join(dist, "ui/view.html"));
 
 const cloudBuild = join(cloud, "dist");
 // Source maps would double the package size; the deployed Worker doesn't need them.
-if (existsSync(cloudBuild)) await cp(cloudBuild, join(dist, "cloud"), { recursive: true, filter: (src) => !src.endsWith(".map") });
+if (existsSync(cloudBuild)) {
+  await cp(cloudBuild, join(dist, "cloud"), { recursive: true, filter: (src) => !src.endsWith(".map") });
+  // Deploy with the same cf version that produced the build: the Build Output format changes between releases.
+  const cfVersion = JSON.parse(await readFile(join(cloud, "node_modules/cf/package.json"), "utf8")).version;
+  await writeFile(join(dist, "cloud", "cf-version.txt"), `${cfVersion}\n`);
+}
 
 await chmod(join(dist, "index.js"), 0o755);
 console.log("built things3pp CLI");
