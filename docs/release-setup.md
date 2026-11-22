@@ -1,8 +1,8 @@
 # Release setup
 
-How `.github/workflows/release.yml` publishes `packages/mcp` to npm as [`things3pp`](https://www.npmjs.com/package/things3pp), and the one-time setup it needs.
+How `.github/workflows/release.yml` publishes `packages/cli` to npm as [`things3pp`](https://www.npmjs.com/package/things3pp), and the one-time setup it needs.
 
-Every push to `master` that touches `packages/mcp/**`, `pnpm-lock.yaml` or the workflow (and every manual dispatch on `master`) typechecks, tests, builds and publishes `0.<minor>.<run number>`. To bump the minor or major version, change it in `packages/mcp/package.json`; CI keeps the first two parts and replaces the patch with the run number. A run fails if its version is already on npm. Re-running a run reuses its version, so push or dispatch a new run instead.
+Every push to `master` that touches `packages/cli/**`, `packages/core/**`, `packages/cloud/**`, `pnpm-lock.yaml` or the workflow (and every manual dispatch on `master`) typechecks, tests, builds and publishes `0.<minor>.<run number>`. To bump the minor or major version, change it in `packages/cli/package.json`; CI keeps the first two parts and replaces the patch with the run number. A run fails if its version is already on npm. Re-running a run reuses its version, so push or dispatch a new run instead.
 
 It uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/): GitHub's OIDC token proves the workflow, so no npm token is stored anywhere. npm is retiring 2FA-bypass tokens, and a passkey-protected account can't publish from CI any other way. The repository is public, so npm also attaches provenance to every release.
 
@@ -10,8 +10,8 @@ It uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/): Gi
 
 1. **Publish the first version by hand.** Trusted publishing can't be configured for a package that doesn't exist yet. Sign in with your passkey in the browser:
    ```sh
-   pnpm install && pnpm --filter things3pp build
-   cd packages/mcp
+   pnpm install && pnpm --filter "things3pp..." build
+   cd packages/cli
    npx npm@11 login --auth-type=web
    npx npm@11 publish --access public
    ```
