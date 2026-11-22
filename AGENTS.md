@@ -15,7 +15,7 @@ Guide for AI coding agents working in this repo. Human-facing docs live in the R
 
 ## Commands
 
-Run from the repo root unless noted. Developing needs Node ≥ 22.12 (`.nvmrc`) and pnpm 10 through Corepack (`corepack enable`). The published CLI runs on Node ≥ 20 (the hosted-app agent needs 22+ for WebSocket).
+Run from the repo root unless noted. Developing needs Node ≥ 22.12 (`.nvmrc`) and pnpm 10 through Corepack (`corepack enable`). Check `pnpm --version` says 10.x before installing: an older global pnpm (e.g. Homebrew's 8.x) rewrites `pnpm-lock.yaml` in a format CI rejects. If in doubt, use `npx pnpm@10.34.6`. The published CLI runs on Node ≥ 20 (the hosted-app agent needs 22+ for WebSocket).
 
 ```bash
 pnpm install
