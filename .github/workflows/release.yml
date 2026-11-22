@@ -53,8 +53,6 @@ jobs:
           import fs from 'node:fs';
           const file = 'packages/cli/package.json';
           const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
-          // Workspace-only build tools (things3pp-core is bundled into dist) aren't needed by users.
-          delete manifest.devDependencies;
           const [major, minor] = manifest.version.split('.');
           const version = `${major}.${minor}.${process.env.GITHUB_RUN_NUMBER}`;
           manifest.version = version;
@@ -71,6 +69,9 @@ jobs:
           fi
       - name: Build
         run: pnpm --filter "things3pp..." build
+      - name: Drop workspace-only devDependencies from the published manifest
+        # After the build: pnpm needs them to build core and cloud first. Users don't (they're bundled).
+        run: node -e "const f='packages/cli/package.json';const fs=require('fs');const m=JSON.parse(fs.readFileSync(f,'utf8'));delete m.devDependencies;fs.writeFileSync(f,JSON.stringify(m,null,2)+'\n')"
       - name: Publish to npm
         # Skipped until the repository variable NPM_PUBLISH is "true", set once the trusted
         # publisher (PaulAshraf/things3-plus-plus, release.yml) is configured on npmjs.com.
