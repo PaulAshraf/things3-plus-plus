@@ -1,0 +1,65 @@
+{
+  "name": "things3pp",
+  "version": "0.2.0",
+  "description": "Use Things 3 from AI apps and the web: an MCP server for Claude, Codex and ChatGPT, plus a hosted Things-style web app.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "things3pp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "darwin"
+  ],
+  "keywords": [
+    "things",
+    "things3",
+    "mcp",
+    "model-context-protocol",
+    "mcp-apps",
+    "claude",
+    "codex",
+    "productivity",
+    "cloudflare",
+    "web-app"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PaulAshraf/things3-plus-plus.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "pnpm build && node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build && pnpm test",
+    "test:e2e": "pnpm build && THINGS_E2E=1 vitest run test/e2e"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.4",
+    "@modelcontextprotocol/node": "^2.1.2",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@types/node": "^22.20.5",
+    "esbuild": "0.28.2",
+    "playwright": "^1.65.1",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1",
+    "things3pp-core": "workspace:*",
+    "things3pp-cloud": "workspace:*"
+  }
+}

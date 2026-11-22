@@ -1,0 +1,30 @@
+{
+  "name": "things3pp-cloud",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Hosted Things web app + remote MCP server on Cloudflare Workers. Deployed with `things3pp cloud deploy`.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "cf dev",
+    "build": "cf build && rm -rf dist && mkdir -p dist && cp -R .cloudflare/output dist/output",
+    "typecheck": "cf workers types >/dev/null && tsc -p tsconfig.json && tsc -p tsconfig.app.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^1.2.4",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.1.0",
+    "preact": "^11.2.0",
+    "things3pp-core": "workspace:*",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "beta",
+    "cf": "^1.0.0-beta.26",
+    "typescript": "7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "5.1.1"
+  }
+}

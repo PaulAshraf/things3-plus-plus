@@ -1,6 +1,6 @@
 name: Release npm
 
-# Publishes packages/mcp to npm as `things3pp` on every push to master that touches it.
+# Publishes packages/cli to npm as `things3pp` on every push to master that touches it.
 # npm trusted publishing: GitHub's OIDC token proves this workflow, so no npm token is stored.
 # One-time setup: docs/release-setup.md.
 
@@ -8,7 +8,9 @@ on:
   push:
     branches: [master]
     paths:
-      - "packages/mcp/**"
+      - "packages/cli/**"
+      - "packages/core/**"
+      - "packages/cloud/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/release.yml"
   workflow_dispatch:
@@ -49,8 +51,10 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const file = 'packages/mcp/package.json';
+          const file = 'packages/cli/package.json';
           const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+          // Workspace-only build tools (things3pp-core is bundled into dist) aren't needed by users.
+          delete manifest.devDependencies;
           const [major, minor] = manifest.version.split('.');
           const version = `${major}.${minor}.${process.env.GITHUB_RUN_NUMBER}`;
           manifest.version = version;
@@ -66,12 +70,12 @@ jobs:
             exit 1
           fi
       - name: Build
-        run: pnpm --filter things3pp build
+        run: pnpm --filter "things3pp..." build
       - name: Publish to npm
         # Skipped until the repository variable NPM_PUBLISH is "true", set once the trusted
         # publisher (PaulAshraf/things3-plus-plus, release.yml) is configured on npmjs.com.
         if: vars.NPM_PUBLISH == 'true'
-        working-directory: packages/mcp
+        working-directory: packages/cli
         run: |
           # Trusted publishing needs npm 11.5.1+. Typecheck, tests and build already ran above.
           npx --yes npm@11.6.2 publish --access public --ignore-scripts
