@@ -4,7 +4,8 @@
 // SECURITY: the Worker can only send `call` messages carrying an Action. MacActions validates it
 // against ActionSchema before anything runs; there's no delete, and nothing becomes code.
 
-import { diffSnapshots, type Snapshot } from "things3pp-core/model/types";
+import { diffSnapshots, type Snapshot, type Task } from "things3pp-core/model/types";
+import { readSnapshotViaAppleScript } from "things3pp-core/things/applescript-snapshot";
 import type { HubToMac, MacToHub } from "things3pp-core/relay/protocol";
 import { challengeText } from "things3pp-core/relay/protocol";
 import { MacActions, macUrlScheme } from "things3pp-core/things/actions";
@@ -35,11 +36,17 @@ export class Connector {
   private rereadQueued = false;
   private tokenCache: { value: string | null; at: number } | null = null;
   private readonly actions: MacActions;
+  private readonly client = new ThingsClient();
+  /** "database" = full detail from SQLite; "basic" = AppleScript only (no access to Things' data yet). */
+  private mode: "database" | "basic" | null = null;
+  private basicLogbook: Task[] = [];
+  private basicReads = 0;
+  private logbookDue = false;
   private readonly log: (line: string) => void;
 
   constructor(private readonly opts: ConnectorOptions) {
     this.log = opts.log ?? ((l) => console.log(`${new Date().toISOString()} ${l}`));
-    this.actions = new MacActions(new ThingsClient(), macUrlScheme(() => this.urlToken()));
+    this.actions = new MacActions(this.client, macUrlScheme(() => this.urlToken()));
   }
 
   start() {
@@ -135,6 +142,7 @@ export class Connector {
         const result = await this.actions.run(msg.action);
         this.log(`${msg.action.op}: ${result.ok ? "done" : `failed (${result.error})`}`);
         // Let Things finish writing, then push the change before answering so readers see it.
+        if (msg.action.op === "setStatus") this.logbookDue = true;
         if (result.ok) {
           await new Promise((r) => setTimeout(r, msg.action.op === "setChecklist" || "evening" in (msg.action.args ?? {}) ? 400 : 120));
           await this.refresh();
@@ -157,8 +165,8 @@ export class Connector {
     try {
       this.dbPath = findThingsDatabase();
       this.watcher = watchDatabase(this.dbPath, () => void this.refresh());
-    } catch (e) {
-      this.reportProblem(e);
+    } catch {
+      // No access yet: basic mode polls instead (see read()).
     }
   }
 
@@ -168,13 +176,36 @@ export class Connector {
     this.send({ t: "status", ok: false, message });
   }
 
+  /** Reads Things: the database when we can (full detail), otherwise AppleScript (basic mode). */
   private async read(): Promise<Snapshot | null> {
     try {
       this.dbPath ??= findThingsDatabase();
       const snap = await readSnapshot(this.dbPath);
+      if (this.mode !== "database") {
+        this.mode = "database";
+        this.log("Reading the Things database (full detail).");
+        this.watcher?.close();
+        this.watcher = null;
+        this.ensureWatching();
+      }
       return snap;
     } catch (e) {
-      this.reportProblem(e instanceof DatabaseError ? e : new Error(`Couldn't read Things: ${(e as Error).message}`));
+      if (!(e instanceof DatabaseError) || e.code === "read_failed") {
+        this.log(e instanceof Error ? e.message : String(e));
+      }
+    }
+    try {
+      const readLogbook = this.mode !== "basic" || this.logbookDue || ++this.basicReads % 10 === 0;
+      this.logbookDue = false;
+      const { snapshot, logbook } = await readSnapshotViaAppleScript(this.client, { readLogbook, previousLogbook: this.basicLogbook });
+      this.basicLogbook = logbook;
+      if (this.mode !== "basic") {
+        this.mode = "basic";
+        this.log("Basic mode: reading Things through AppleScript. Allow access to Things' data to add checklists, headings and This Evening.");
+      }
+      return snapshot;
+    } catch (e) {
+      this.reportProblem(new Error(`Couldn't read Things: ${(e as Error).message}`));
       return null;
     }
   }

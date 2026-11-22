@@ -6,7 +6,8 @@ import { pairingCode, randomToken, sha256 } from "./util.ts";
 
 const PAIRING_TTL_MS = 10 * 60_000;
 const CHALLENGE_TTL_MS = 5 * 60_000;
-const MAX_PENDING_PAIRINGS = 20;
+const MAX_PENDING_PAIRINGS = 500;
+const MAX_PENDING_PER_CLIENT = 5;
 
 export interface PairingInfo {
   pairingId: string;
@@ -48,6 +49,7 @@ export class Directory extends DurableObject {
         device_id TEXT,
         recover_account_id TEXT,
         recover_device_id TEXT,
+        client TEXT,
         expires_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS challenges (
@@ -79,18 +81,23 @@ export class Directory extends DurableObject {
 
   // ----- pairing -----
 
-  async startPairing(input: { publicKey: string; deviceName: string; setupOk: boolean; recover?: { accountId: string; deviceId: string } }) {
+  async startPairing(input: { publicKey: string; deviceName: string; setupOk: boolean; recover?: { accountId: string; deviceId: string }; client?: string }) {
     this.sweep();
     const pending = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM pairings WHERE status = 'pending'").one().n;
     if (pending >= MAX_PENDING_PAIRINGS) throw new Error("Too many pairing attempts. Wait a few minutes and try again.");
+    const clientHash = input.client ? await sha256(input.client) : null;
+    if (clientHash) {
+      const mine = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM pairings WHERE status = 'pending' AND client = ?", clientHash).one().n;
+      if (mine >= MAX_PENDING_PER_CLIENT) throw new Error("Too many pairing attempts from this network. Wait a few minutes and try again.");
+    }
     const pairingId = randomToken(16);
     const pollToken = randomToken(32);
     let code = pairingCode();
     while (this.sql.exec("SELECT 1 FROM pairings WHERE code = ?", code).toArray().length) code = pairingCode();
     const expiresAt = Date.now() + PAIRING_TTL_MS;
     this.sql.exec(
-      `INSERT INTO pairings (pairing_id, code, poll_hash, device_name, public_key, setup_ok, status, recover_account_id, recover_device_id, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      `INSERT INTO pairings (pairing_id, code, poll_hash, device_name, public_key, setup_ok, status, recover_account_id, recover_device_id, client, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
       pairingId,
       code,
       await sha256(pollToken),
@@ -99,6 +106,7 @@ export class Directory extends DurableObject {
       input.setupOk ? 1 : 0,
       input.recover?.accountId ?? null,
       input.recover?.deviceId ?? null,
+      clientHash,
       expiresAt,
     );
     return { pairingId, code, pollToken, expiresAt };
@@ -125,10 +133,14 @@ export class Directory extends DurableObject {
     };
   }
 
-  /** Reserves the id the first owner account will get, so the passkey can be bound to it. */
-  reserveAccountId(code: string): string | null {
+  /**
+   * Reserves the id a new account will get, so the passkey can be bound to it. Owner-only
+   * deployments allow this once (with the setup key); open ones allow it for every new Mac.
+   */
+  reserveAccountId(code: string, openSignups = false): string | null {
     const p = this.getPairing(code);
-    if (!p || p.status !== "pending" || !p.setupOk || this.ownerAccountId()) return null;
+    if (!p || p.status !== "pending" || p.recover) return null;
+    if (!openSignups && (!p.setupOk || this.ownerAccountId())) return null;
     if (p.newAccountId) return p.newAccountId;
     const id = `acc_${randomToken(12)}`;
     this.sql.exec("UPDATE pairings SET new_account_id = ? WHERE code = ?", id, code);

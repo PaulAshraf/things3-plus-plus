@@ -70,8 +70,12 @@ export interface Snapshot {
   tasks: Task[];
   areas: Area[];
   tags: Tag[];
-  /** What the Mac can change beyond the basics (needs "Enable Things URLs" in Things settings). */
-  capabilities: { urlScheme: boolean };
+  /**
+   * urlScheme: the Mac can edit checklists / This Evening / headings ("Enable Things URLs").
+   * database: read from the Things database (full detail). false = basic mode via AppleScript:
+   * no checklists, headings or This Evening, until the agent gets access to Things' data.
+   */
+  capabilities: { urlScheme: boolean; database?: boolean };
 }
 
 /** Changes since `baseRev`. Entities are replaced whole. */
@@ -107,7 +111,9 @@ export function diffSnapshots(prev: Snapshot, next: Snapshot): SnapshotPatch | n
   const areas = diffList(prev.areas, next.areas);
   const tags = diffList(prev.tags, next.tags);
   const metaChanged =
-    prev.timeZone !== next.timeZone || prev.capabilities.urlScheme !== next.capabilities.urlScheme;
+    prev.timeZone !== next.timeZone ||
+    prev.capabilities.urlScheme !== next.capabilities.urlScheme ||
+    prev.capabilities.database !== next.capabilities.database;
   const empty =
     !metaChanged &&
     tasks.upsert.length + tasks.remove.length + areas.upsert.length + areas.remove.length + tags.upsert.length + tags.remove.length === 0;

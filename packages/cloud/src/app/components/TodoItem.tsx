@@ -368,6 +368,7 @@ export function TodoCard({ task }: { task: Task }) {
           class="tool"
           title="Checklist"
           aria-label="Add checklist"
+          hidden={state.snapshot?.capabilities.urlScheme === false}
           onClick={() => {
             if (items.length) return;
             setItems([{ id: `new_${Date.now()}`, title: "", done: false }]);

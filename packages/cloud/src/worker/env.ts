@@ -5,6 +5,7 @@ import type { Directory } from "./directory.ts";
 export interface Env {
   OAUTH_KV: KVNamespace;
   SETUP_KEY: string;
+  SIGNUPS: string;
   ACCOUNT: DurableObjectNamespace<Account>;
   DIRECTORY: DurableObjectNamespace<Directory>;
   ASSETS: Fetcher;

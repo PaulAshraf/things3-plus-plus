@@ -88,6 +88,29 @@ interface BridgeResponse {
   errorNumber?: number | null;
 }
 
+export interface RawAppleScriptItem {
+  id: string;
+  kind: "todo" | "project";
+  title: string;
+  notes: string;
+  status: Status;
+  when: string | null;
+  deadline: string | null;
+  tagNames: string[];
+  createdAt: string | null;
+  modifiedAt: string | null;
+  completedAt: string | null;
+  projectId?: string | null;
+  areaId?: string | null;
+}
+export interface RawAppleScriptSnapshot {
+  items: RawAppleScriptItem[];
+  logbook: RawAppleScriptItem[] | null;
+  lists: Record<"inbox" | "today" | "upcoming" | "anytime" | "someday" | "trash", string[]>;
+  areas: { id: string; title: string }[];
+  tags: { id: string; title: string; parentId: string | null }[];
+}
+
 export class ThingsClient implements ThingsApi {
   constructor(private readonly runner: Runner = osascriptRunner) {}
 
@@ -156,6 +179,10 @@ export class ThingsClient implements ThingsApi {
   }
   setStatus(id: string, status: Status) {
     return this.call<Todo>("setStatus", { id, status });
+  }
+  /** Everything AppleScript can see, for basic mode (see applescript-snapshot.ts). */
+  snapshotRaw(opts: { logbook: boolean; logbookLimit?: number }) {
+    return this.call<RawAppleScriptSnapshot>("snapshot", opts);
   }
   /** Moves an item to the Trash. Deliberately NOT exposed as an MCP tool — test cleanup only. */
   trashForTests(id: string) {

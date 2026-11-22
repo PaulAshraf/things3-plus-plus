@@ -116,6 +116,12 @@ importers:
         specifier: 5.1.1
         version: 5.1.1(@types/node@22.20.5)(vite@8.3.8)
 
+  packages/mac:
+    devDependencies:
+      things3pp-core:
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   /@cloudflare/build-output-utils@1.0.0-rc.1:

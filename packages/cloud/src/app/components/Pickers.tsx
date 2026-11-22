@@ -14,7 +14,7 @@ import {
   IconAnytime,
   Pie,
 } from "../icons.tsx";
-import { currentDay, index, type WhenChoice } from "../store.ts";
+import { currentDay, index, state, type WhenChoice } from "../store.ts";
 import { Popover, type Anchor } from "./Popover.tsx";
 
 // ---------- calendar ----------
@@ -111,9 +111,11 @@ export function WhenPicker({ anchor, task, onPick, onClose }: { anchor: Anchor; 
       <button class="menu-item" onClick={() => pick("today")}>
         <IconToday /> Today
       </button>
-      <button class="menu-item" onClick={() => pick("evening")}>
-        <IconEvening /> This Evening
-      </button>
+      {state.snapshot?.capabilities.urlScheme !== false && (
+        <button class="menu-item" onClick={() => pick("evening")}>
+          <IconEvening /> This Evening
+        </button>
+      )}
       <Calendar picked={picked} onPick={(d) => pick(d === today ? "today" : { day: d })} />
       <button class="menu-item" onClick={() => pick("anytime")}>
         <IconAnytime /> Anytime

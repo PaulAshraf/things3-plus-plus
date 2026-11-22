@@ -48,7 +48,7 @@ function stream(cmd: string, args: string[], cwd: string): Promise<{ code: numbe
 
 const HOST_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
-export async function deploy(opts: { domain?: string } = {}): Promise<number> {
+export async function deploy(opts: { domain?: string; shared?: boolean } = {}): Promise<number> {
   const build = bundledBuild();
   if (!build) {
     fail("This copy of things3pp doesn't include the hosted app. Reinstall it with: npm install -g things3pp");
@@ -99,13 +99,18 @@ export async function deploy(opts: { domain?: string } = {}): Promise<number> {
     fail(`"${domain}" isn't a valid hostname. Use something like things.example.com.`);
     return 1;
   }
+  const workerConfig = join(project, ".cloudflare", "output", "v1", "workers", "default", "worker.config.json");
+  const wc = JSON.parse(readFileSync(workerConfig, "utf8")) as { domains?: string[]; env?: Record<string, { type: string; value?: unknown }> };
   if (domain) {
-    const workerConfig = join(project, ".cloudflare", "output", "v1", "workers", "default", "worker.config.json");
-    const wc = JSON.parse(readFileSync(workerConfig, "utf8")) as { domains?: string[] };
     wc.domains = [domain];
-    writeFileSync(workerConfig, `${JSON.stringify(wc, null, 1)}\n`);
     info(`Also serving it at https://${domain}`);
   }
+  if (opts.shared) {
+    // A shared service: any Mac can create its own account (no setup key).
+    wc.env = { ...wc.env, SIGNUPS: { type: "text", value: "open" } };
+    info("Shared mode: anyone with the address can create an account.");
+  }
+  writeFileSync(workerConfig, `${JSON.stringify(wc, null, 1)}\n`);
   const alreadyOwned = Boolean(cfg.device?.deviceId);
   const setupKey = cfg.setupKey ?? `t3pp_setup_${randomBytes(24).toString("base64url")}`;
   const secretsFile = join(project, ".secrets.json");

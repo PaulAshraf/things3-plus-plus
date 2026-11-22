@@ -23,3 +23,17 @@ Until `NPM_PUBLISH` is `true`, the workflow still typechecks, tests and builds, 
 ## Rolling back a bad release
 
 npm versions can't be overwritten, and unpublishing breaks anyone who installed the release. Fix forward: revert or fix the commit on `master` and push. CI publishes a higher run number, which `npx -y things3pp` picks up. To warn people off the bad version in the meantime, run `npm deprecate things3pp@<version> "<reason>"`.
+
+## Mac app (things3pp.app)
+
+`.github/workflows/release-mac.yml` builds the menu-bar app, signs it with a Developer ID, notarizes it, and attaches `things3pp-<version>.dmg` to a GitHub release (`mac-v<version>`). Run it from the Actions tab or push a `mac-v*` tag. The version comes from `packages/cli/package.json`.
+
+One-time setup (needs an Apple Developer Program membership):
+
+1. In Xcode → Settings → Accounts, create a **Developer ID Application** certificate. Export it with its key from Keychain Access as a `.p12`.
+2. Create an app-specific password for your Apple ID at appleid.apple.com.
+3. Add repository secrets: `MAC_CERT_P12_BASE64` (`base64 -i cert.p12 | pbcopy`), `MAC_CERT_PASSWORD`, `MAC_SIGN_IDENTITY` (e.g. `Developer ID Application: Your Name (TEAMID)`), `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`.
+
+Locally: `packages/mac/scripts/build-app.sh` makes an ad-hoc signed app for testing. With `SIGN_IDENTITY` and `NOTARY_PROFILE` (from `xcrun notarytool store-credentials`) set, `--dmg` makes the distributable DMG.
+
+Homebrew: `packaging/homebrew/Casks/things3pp.rb` is the cask template. Publish it in a tap repo (`homebrew-things3pp`) with the release's version and SHA-256.

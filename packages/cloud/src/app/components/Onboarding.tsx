@@ -15,7 +15,7 @@ const supportsPasskeys = () => typeof window.PublicKeyCredential !== "undefined"
 
 // ---------- sign in ----------
 
-export function SignIn({ setUp }: { setUp: boolean }) {
+export function SignIn({ setUp, shared }: { setUp: boolean; shared?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const signIn = async () => {
@@ -59,7 +59,13 @@ export function SignIn({ setUp }: { setUp: boolean }) {
           <IconKey /> {busy ? "Waiting for passkey…" : "Sign in with passkey"}
         </button>
         {!supportsPasskeys() && <p class="fine">This browser doesn't support passkeys. Try Safari, Chrome, Edge or Firefox.</p>}
-        <p class="fine">Lost your passkeys? Run <b>things3pp connect</b> on your Mac to add a new one.</p>
+        {shared ? (
+          <p class="fine">
+            New here? Install the things3pp app on the Mac that has Things, and choose <b>Sign in</b>. It creates your account and passkey.
+          </p>
+        ) : (
+          <p class="fine">Lost your passkeys? Run <b>things3pp connect</b> on your Mac to add a new one.</p>
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,15 @@
+{
+  "name": "things3pp-mac",
+  "version": "0.0.0",
+  "private": true,
+  "description": "things3pp for Mac: menu-bar app that keeps your Mac connected to your hosted Things.",
+  "license": "MIT",
+  "scripts": {
+    "build": "scripts/build-app.sh",
+    "typecheck": "swift build",
+    "test": "swift test"
+  },
+  "devDependencies": {
+    "things3pp-core": "workspace:*"
+  }
+}

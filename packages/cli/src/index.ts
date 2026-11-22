@@ -33,6 +33,7 @@ Usage
   things3pp cloud deploy     Deploy the web app + remote MCP server with the Cloudflare CLI (cf)
       --domain <host>            Also serve it on a custom domain from your Cloudflare account
                                  (e.g. things.example.com; remembered for later deploys)
+      --shared                   Run it as a shared service: any Mac can create its own account
   things3pp cloud status     Show the linked web address and whether this Mac is connected
   things3pp cloud open       Open your hosted Things in the browser
 
@@ -113,9 +114,9 @@ async function cloud(argv: string[]): Promise<number> {
     return 0;
   }
   if (command === "deploy") {
-    const { values } = parseArgs({ args: rest, options: { domain: { type: "string" } } });
+    const { values } = parseArgs({ args: rest, options: { domain: { type: "string" }, shared: { type: "boolean", default: false } } });
     const { deploy } = await import("./cloud/deploy.js");
-    return deploy({ domain: values.domain });
+    return deploy({ domain: values.domain, shared: Boolean(values.shared) });
   }
   if (command === "status") {
     const { status } = await import("./cloud/status.js");

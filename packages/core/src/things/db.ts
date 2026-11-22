@@ -245,7 +245,7 @@ export async function readSnapshot(dbPath: string, opts: ReadOptions = {}): Prom
     tasks,
     areas,
     tags,
-    capabilities: { urlScheme },
+    capabilities: { urlScheme, database: true },
   };
 }
 

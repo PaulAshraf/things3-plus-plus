@@ -129,17 +129,24 @@ Put a Things-style web app and a remote MCP server on **your own Cloudflare acco
 **You need:** the Mac with Things, Node.js 22+, and the [Cloudflare CLI](https://developers.cloudflare.com/cf/get-started/) (`npm install -g cf`, then `cf auth login`).
 
 ```bash
+npx -y things3pp cloud deploy --domain things.example.com   # your Cloudflare account; --domain is optional
+```
+
+Then connect your Mac. **The easy way is the things3pp Mac app** ([download](https://github.com/PaulAshraf/things3-plus-plus/releases?q=mac-v)): open it, click **Sign in**, create your passkey, and allow it to control Things. It walks you through the rest with live checkmarks and starts at login.
+
+It works right away in **basic mode** (lists, projects, areas, tags, dates). To add checklists, headings and This Evening, it guides you through two optional steps: give it access to Things' data, and turn on **Enable Things URLs** in Things → Settings → General.
+
+<details>
+<summary>Prefer Terminal?</summary>
+
+```bash
 npm install -g things3pp     # the background agent needs a permanent install
-things3pp cloud deploy       # puts it on your Cloudflare account
 things3pp connect            # links this Mac and creates your passkey
 things3pp agent install      # keeps this Mac connected, even after restarts
 ```
 
-Then give the agent access to Things:
-
-- **Full Disk Access** for the `node` it runs with (System Settings → Privacy & Security → Full Disk Access). `agent install` prints the exact path. Things keeps checklists, headings and This Evening in its database, and macOS protects that database.
-- In Things, open **Settings → General** and turn on **Enable Things URLs**. The web app needs this to edit checklists, This Evening and headings.
-- Click **OK** the first time macOS asks to let it control Things.
+For full detail, give the `node` that `agent install` prints Full Disk Access. The Mac app can take over this link later ("Use That Link").
+</details>
 
 To use it from Claude.ai or ChatGPT, add `https://<your-worker>.workers.dev/mcp` as a custom connector. You'll approve it with your passkey. Settings in the web app shows the exact address.
 
@@ -165,7 +172,7 @@ To use it from Claude.ai or ChatGPT, add `https://<your-worker>.workers.dev/mcp`
 | `npx -y things3pp mcp doctor` | Check the local MCP setup |
 | `npx -y things3pp mcp serve` | Share Things with your other computers (Tailscale) |
 | `npx -y things3pp mcp token --rotate` | Replace the Tailscale access token |
-| `things3pp cloud deploy` | Deploy (or update) your own hosted Things on Cloudflare |
+| `things3pp cloud deploy [--domain <host>] [--shared]` | Deploy (or update) your own hosted Things on Cloudflare |
 | `things3pp cloud status` / `open` | Show or open your hosted Things |
 | `things3pp connect` | Link this Mac (or add a new passkey if it's already linked) |
 | `things3pp disconnect` | Unlink this Mac and delete its device key |

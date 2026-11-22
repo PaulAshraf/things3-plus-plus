@@ -30,6 +30,14 @@ export function MacStatus() {
       </div>
     );
   }
+  if (!mac.problem && state.snapshot?.capabilities.database === false) {
+    return (
+      <div class="mac-pill info" role="status" title="Your Mac is reading Things through AppleScript. Give the things3pp agent access to Things' data (Full Disk Access) to add checklists, headings and This Evening.">
+        <span class="dot" />
+        <span>Basic mode · checklists, headings and This Evening need access to Things' data on your Mac</span>
+      </div>
+    );
+  }
   if (mac.problem) {
     return (
       <div class="mac-pill warn" role="status" title={mac.problem}>

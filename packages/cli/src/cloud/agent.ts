@@ -119,8 +119,8 @@ export async function run(): Promise<number> {
   try {
     findThingsDatabase();
   } catch (e) {
-    if (e instanceof DatabaseError) warn(e.message);
-    else throw e;
+    if (!(e instanceof DatabaseError)) throw e;
+    info("Starting in basic mode (no access to Things' data yet). Give this node Full Disk Access to add checklists, headings and This Evening.");
   }
   const connector = new Connector({ config: link });
   connector.start();

@@ -228,7 +228,7 @@ function App() {
       </div>
     );
   }
-  if (state.auth.status === "signedOut") return <SignIn setUp={state.auth.setUp} />;
+  if (state.auth.status === "signedOut") return <SignIn setUp={state.auth.setUp} shared={state.auth.shared} />;
   return (
     <>
       <Shell />

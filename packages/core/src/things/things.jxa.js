@@ -332,6 +332,103 @@ var OPS = {
     return readItem(things, args.id);
   },
 
+  // Everything AppleScript can see, in batched reads (one Apple event per property per collection).
+  // Used when the Things database can't be read (no Full Disk Access): no checklists, headings or
+  // This Evening, but lists, projects, areas, tags, dates and order all work.
+  snapshot: function (things, args) {
+    var logbookLimit = args.logbookLimit || 500;
+    function batch(coll) {
+      var ids = safe(function () { return coll.id(); }, []);
+      function col(fn) {
+        return safe(fn, null) || [];
+      }
+      return {
+        ids: ids,
+        name: col(function () { return coll.name(); }),
+        notes: col(function () { return coll.notes(); }),
+        status: col(function () { return coll.status(); }),
+        when: col(function () { return coll.activationDate(); }),
+        due: col(function () { return coll.dueDate(); }),
+        tags: col(function () { return coll.tagNames(); }),
+        created: col(function () { return coll.creationDate(); }),
+        modified: col(function () { return coll.modificationDate(); }),
+        done: col(function () { return coll.completionDate(); }),
+        canceled: col(function () { return coll.cancellationDate(); }),
+      };
+    }
+    function rows(b, kind) {
+      var out = [];
+      for (var i = 0; i < b.ids.length; i++) {
+        out.push({
+          id: b.ids[i],
+          kind: kind,
+          title: b.name[i] || "",
+          notes: b.notes[i] || "",
+          status: b.status[i] || "open",
+          when: toDay(b.when[i]),
+          deadline: toDay(b.due[i]),
+          tagNames: splitTags(b.tags[i]),
+          createdAt: toIso(b.created[i]),
+          modifiedAt: toIso(b.modified[i]),
+          completedAt: toIso(b.done[i] || b.canceled[i]),
+        });
+      }
+      return out;
+    }
+    function listIds(key) {
+      return safe(function () { return things.lists.byId(LIST_IDS[key]).toDos.id(); }, []);
+    }
+
+    var lists = {};
+    var keys = ["inbox", "today", "upcoming", "anytime", "someday", "trash"];
+    for (var k = 0; k < keys.length; k++) lists[keys[k]] = listIds(keys[k]);
+
+    // things.toDos / things.projects are the open items; finished ones live only in the Logbook.
+    var todos = rows(batch(things.toDos), "todo");
+    var projects = rows(batch(things.projects), "project");
+    var projectIdSet = {};
+    for (var q = 0; q < projects.length; q++) projectIdSet[projects[q].id] = true;
+    var logbook = null;
+    if (args.logbook) {
+      // Batched over the whole list (it can hold thousands), then the newest `logbookLimit`.
+      logbook = rows(batch(things.lists.byId(LIST_IDS.logbook).toDos), "todo").slice(0, logbookLimit);
+    }
+
+    // Containers: one batched id read per open project / area.
+    var projectOf = {};
+    var areaOf = {};
+    for (var p = 0; p < projects.length; p++) {
+      if (projects[p].status !== "open") continue;
+      var pid = projects[p].id;
+      var kids = safe(function () { return things.projects.byId(pid).toDos.id(); }, []);
+      for (var c = 0; c < kids.length; c++) projectOf[kids[c]] = pid;
+      var area = safe(function () { return things.projects.byId(pid).area.id(); }, null);
+      if (area) areaOf[pid] = area;
+    }
+    var areaIds = things.areas.id();
+    var areaNames = things.areas.name();
+    for (var a = 0; a < areaIds.length; a++) {
+      var aid = areaIds[a];
+      var inArea = safe(function () { return things.areas.byId(aid).toDos.id(); }, []);
+      for (var d = 0; d < inArea.length; d++) if (!areaOf[inArea[d]]) areaOf[inArea[d]] = aid;
+    }
+    var all = todos.concat(projects);
+    for (var t = 0; t < all.length; t++) {
+      all[t].projectId = projectOf[all[t].id] || null;
+      all[t].areaId = all[t].projectId ? null : areaOf[all[t].id] || null;
+    }
+
+    var tagIds = safe(function () { return things.tags.id(); }, []);
+    var tagNames = safe(function () { return things.tags.name(); }, []);
+    var tagParents = safe(function () { return things.tags.parentTag.id(); }, []);
+    var tags = [];
+    for (var g = 0; g < tagIds.length; g++) tags.push({ id: tagIds[g], title: tagNames[g], parentId: tagParents[g] || null });
+    var areas = [];
+    for (var r = 0; r < areaIds.length; r++) areas.push({ id: areaIds[r], title: areaNames[r] });
+
+    return { items: all, logbook: logbook, lists: lists, areas: areas, tags: tags };
+  },
+
   // Not exposed as an MCP tool. Used only by the live test to clean up after itself.
   trash: function (things, args) {
     var item = getTodo(things, args.id);

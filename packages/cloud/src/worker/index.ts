@@ -77,12 +77,13 @@ const PUBLIC_KEY_RE = /^[A-Za-z0-9_-]{43}$/; // raw Ed25519 key, base64url
 async function api(request: Request, env: Env, path: string): Promise<Response> {
   const method = request.method;
   const dir = directory(env);
+  const open = env.SIGNUPS === "open";
 
   // Who am I / is this deployment set up yet?
   if (path === "/api/state" && method === "GET") {
     const session = await currentAccount(env, request);
     const owner = await dir.ownerAccountId();
-    if (!session) return json({ signedIn: false, setUp: owner !== null });
+    if (!session) return json({ signedIn: false, setUp: open || owner !== null, shared: open });
     const acc = account(env, session.accountId);
     return json({ signedIn: true, setUp: true, mac: await acc.macState(), devices: await acc.devices() });
   }
@@ -115,7 +116,7 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
       recover = { accountId, deviceId };
     }
     try {
-      const started = await dir.startPairing({ publicKey: b.publicKey, deviceName: b.deviceName, setupOk, recover });
+      const started = await dir.startPairing({ publicKey: b.publicKey, deviceName: b.deviceName, setupOk, recover, client: request.headers.get("cf-connecting-ip") ?? undefined });
       const url = new URL(request.url);
       return json({ ...started, approveUrl: `${url.origin}/pair#${started.code}` });
     } catch (e) {
@@ -142,12 +143,12 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
       deviceName: p.deviceName,
       expiresAt: p.expiresAt,
       // First-time setup: no owner yet, and the Mac proved it deployed this Worker.
-      canCreateAccount: !owner && p.setupOk,
+      canCreateAccount: !p.recover && !session && (open || (!owner && p.setupOk)),
       // A linked Mac asked to add a new passkey.
       canAddPasskey: Boolean(p.recover),
-      needsSignIn: owner !== null && !session,
+      needsSignIn: !open && owner !== null && !session,
       signedIn: Boolean(session),
-      setUp: owner !== null,
+      setUp: open || owner !== null,
     });
   }
 
@@ -160,7 +161,7 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
       const acc = account(env, p.recover.accountId);
       return json(await registrationOptions(env, request, p.recover.accountId, "add-passkey", await acc.credentialIds()));
     }
-    const accountId = code ? await dir.reserveAccountId(code) : null;
+    const accountId = code ? await dir.reserveAccountId(code, open) : null;
     if (!accountId) return problem(403, "forbidden", "This code can't create an account. Run things3pp connect again on the Mac that deployed this.");
     return json(await registrationOptions(env, request, accountId, "register"));
   }
@@ -177,12 +178,12 @@ async function api(request: Request, env: Env, path: string): Promise<Response> 
       await dir.approvePairing(code, verified.accountId, p.recover.deviceId);
       return withCookie(json({ ok: true }), await startSession(env, request, verified.accountId));
     }
-    if (!p || p.status !== "pending" || !p.setupOk || !p.newAccountId || !b?.credential) {
+    if (!p || p.status !== "pending" || (!open && !p.setupOk) || !p.newAccountId || !b?.credential) {
       return problem(400, "invalid_request", "That pairing has expired. Run things3pp connect again.");
     }
     const verified = await verifyRegistration(env, request, b.credential, "register");
     if (!verified || verified.accountId !== p.newAccountId) return problem(400, "passkey_failed", "Couldn't verify the passkey. Try again.");
-    if (!(await dir.claimOwner(verified.accountId))) return problem(409, "already_set_up", "This Things is already set up. Sign in instead.");
+    if (!open && !(await dir.claimOwner(verified.accountId))) return problem(409, "already_set_up", "This Things is already set up. Sign in instead.");
     const acc = account(env, verified.accountId);
     await acc.addCredential(verified.credential);
     const deviceId = `dev_${randomToken(12)}`;

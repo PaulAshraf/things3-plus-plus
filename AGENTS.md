@@ -10,6 +10,7 @@ Guide for AI coding agents working in this repo. Human-facing docs live in the R
 |---|---|---|
 | `things3pp` (npm) | `packages/cli` | The CLI users install: local MCP server (`things3pp mcp …`, stdio + Tailscale HTTP), and the Mac side of the hosted app (`connect`, `agent`, `cloud deploy`). Bundles core and ships the prebuilt Worker. |
 | `things3pp-core` (private) | `packages/core` | Shared, consumed as TypeScript source: Things bridge (JXA, SQLite reader, relay actions), the snapshot data model + list rules, the MCP tool definitions and the MCP App view. |
+| `things3pp-mac` (private) | `packages/mac` | Native menu-bar app (Swift/SwiftUI): sign-in, guided permissions, and the relay to the hosted Things. The recommended way to connect a Mac. Built with `scripts/build-app.sh`. |
 | `things3pp-cloud` (private) | `packages/cloud` | Cloudflare Worker + Durable Objects (remote MCP with OAuth, passkeys, Mac relay) and the Preact web app. Built with the `cf` CLI. |
 
 ## Commands
@@ -26,6 +27,10 @@ pnpm check        # typecheck + test — run before you finish
 pnpm --filter things3pp-core test:live   # bridge against the real Things app (macOS, needs Automation permission)
 pnpm --filter things3pp test:e2e         # built dist: stdio, HTTP (loopback + Tailscale), CLI, headless-Chrome UI; uses real Things
 node packages/cli/dist/index.js doctor   # after build
+
+# packages/mac (Xcode 16+)
+swift build && swift test          # what pnpm typecheck / test run
+scripts/build-app.sh [--dmg]       # dist/things3pp.app (ad-hoc signed unless SIGN_IDENTITY is set)
 
 # packages/cloud
 npx cf dev            # Worker + web app locally (reads SETUP_KEY from .dev.vars)
@@ -62,6 +67,12 @@ packages/cli/src/
   local.ts            createLocalServer(): core server + ThingsClient + dist/ui/view.html
   http.ts, config.ts, tailscale.ts, cli/   local MCP (unchanged behaviour, now under `mcp`)
   cloud/              config.ts (cloud.json + device key), connect.ts, connector.ts (relay), agent.ts (launchd), deploy.ts, status.ts
+packages/mac/Sources/Things3pp/
+  App.swift, AppState.swift   menu-bar UI + setup window with live permission checks
+  Connector.swift             relay (port of cli/src/cloud/connector.ts): database or basic mode
+  ThingsDatabase.swift        read-only SQLite (same SQL as core/src/things/db.ts)
+  ThingsBridge.swift          runs the bundled things.jxa.js / move.applescript via osascript; MacActions port
+  Identity.swift, Pairing.swift  Keychain device key (Curve25519), pairing, import of a CLI link
 packages/cloud/
   cloudflare.config.ts  Worker, KV (OAuth), DOs, SETUP_KEY secret, assets (SPA)
   src/worker/         index.ts (routes + OAuthProvider), account.ts (Account DO), directory.ts (Directory DO), auth.ts (passkeys/sessions), util.ts
@@ -72,7 +83,7 @@ Stack: TypeScript 7, MCP TypeScript SDK **v2**, `@modelcontextprotocol/ext-apps`
 
 ### How the hosted app works
 
-The Mac is the source of truth. `things3pp agent run` (launchd) opens a WebSocket to `/device/connect`, proves itself by signing a challenge with its Ed25519 device key, sends a full `Snapshot` read from the Things SQLite database, then `SnapshotPatch`es whenever the database changes. The Account DO stores the snapshot and fans it out to browsers (`/api/live`). Writes from the web app (`POST /api/action`) and from remote MCP become `Action`s sent to the Mac, which runs them with `MacActions` and pushes the resulting patch before answering. Remote MCP reads come straight from the stored snapshot, so they work while the Mac sleeps.
+The Mac is the source of truth. The Mac app (or `things3pp agent run` under launchd) opens a WebSocket to `/device/connect`, proves itself by signing a challenge with its Ed25519 device key, sends a full `Snapshot` read from the Things SQLite database, then `SnapshotPatch`es whenever the database changes. Without access to Things' data (no Full Disk Access) it runs in **basic mode**: a snapshot from AppleScript (`snapshot` op in things.jxa.js, `applescript-snapshot.ts` / `ThingsBridge.basicSnapshot`) polled every 30 s, with `capabilities.database = false`, no checklists/headings/This Evening. It switches to the database by itself once access is granted. The Account DO stores the snapshot and fans it out to browsers (`/api/live`). Writes from the web app (`POST /api/action`) and from remote MCP become `Action`s sent to the Mac, which runs them with `MacActions` and pushes the resulting patch before answering. Remote MCP reads come straight from the stored snapshot, so they work while the Mac sleeps.
 
 ## Security invariants (do not break)
 
@@ -84,8 +95,9 @@ The Mac is the source of truth. `things3pp agent run` (launchd) opens a WebSocke
 6. **UI never uses `innerHTML` with data.** MCP view: `h()` + `textContent`. Web app: Preact JSX only, no `dangerouslySetInnerHTML`. The consent page data is embedded as JSON with `<` escaped.
 7. **Client config writers** back up before writing and refuse to rewrite invalid JSON; Codex TOML edits only touch the block marked `# Added by things3pp setup`.
 8. **`mcp serve` doesn't print the token** unless `--show-token`.
-9. **Relay boundary:** the Mac only runs `Action`s that pass `ActionSchema` (zod) in `MacActions.run`, validated again on the Mac even though the DO validates too. The Worker never sends script text.
-10. **Hosted auth:** the first account can only be created by a pairing started with the deployment's `SETUP_KEY` (constant-time compare). Every state-changing `/api/*` call requires the `x-things3pp: 1` header and a same-origin `Origin` (CSRF). Sessions are random tokens stored hashed in the Account DO, in an `HttpOnly; Secure; SameSite=Lax` `__Host-` cookie. MCP consent requires a fresh passkey assertion. WebAuthn challenges are single-use (Directory DO). Device sockets must authenticate within 15 s.
+9. **Keep the TypeScript and Swift relays in step.** `packages/mac` ports the connector, the SQLite reader, the basic-mode mapping and `MacActions` (including validation and "no delete"). Change both, and keep `test/actions.test.ts` and `Tests/Things3ppTests` covering the same rules. The device key lives in the Keychain (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`).
+10. **Relay boundary:** the Mac only runs `Action`s that pass `ActionSchema` (zod) in `MacActions.run`, validated again on the Mac even though the DO validates too. The Worker never sends script text.
+11. **Hosted auth:** with `SIGNUPS=owner` (default, self-hosted) the first account can only be created by a pairing started with the deployment's `SETUP_KEY`; with `SIGNUPS=open` (`cloud deploy --shared`) any new Mac can create its own account, limited to 5 pending pairings per IP (constant-time compare). Every state-changing `/api/*` call requires the `x-things3pp: 1` header and a same-origin `Origin` (CSRF). Sessions are random tokens stored hashed in the Account DO, in an `HttpOnly; Secure; SameSite=Lax` `__Host-` cookie. MCP consent requires a fresh passkey assertion. WebAuthn challenges are single-use (Directory DO). Device sockets must authenticate within 15 s.
 
 ## Adding or changing a tool
 

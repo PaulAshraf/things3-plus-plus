@@ -58,7 +58,7 @@ export interface Toast {
 
 export type Auth =
   | { status: "loading" }
-  | { status: "signedOut"; setUp: boolean }
+  | { status: "signedOut"; setUp: boolean; shared?: boolean }
   | { status: "signedIn" };
 
 export interface State {
@@ -203,11 +203,11 @@ export { api };
 
 export async function loadState() {
   try {
-    const s = await api<{ signedIn: boolean; setUp: boolean; mac?: MacState; devices?: State["devices"] }>("/api/state");
+    const s = await api<{ signedIn: boolean; setUp: boolean; shared?: boolean; mac?: MacState; devices?: State["devices"] }>("/api/state");
     if (s.signedIn) {
       set({ auth: { status: "signedIn" }, mac: s.mac ?? null, devices: s.devices ?? [] });
       connectLive();
-    } else set({ auth: { status: "signedOut", setUp: s.setUp } });
+    } else set({ auth: { status: "signedOut", setUp: s.setUp, shared: s.shared } });
   } catch {
     set({ auth: { status: "signedOut", setUp: true } });
   }
