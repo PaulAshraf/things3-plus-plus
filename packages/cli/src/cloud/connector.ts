@@ -13,7 +13,7 @@ import { DatabaseError, findThingsDatabase, readSnapshot, readUrlSchemeToken, wa
 import { VERSION } from "../version.js";
 import { signWithDevice, type CloudConfig } from "./config.js";
 
-const POLL_MS = 60_000;
+const POLL_MS = 30_000;
 const PING_MS = 30_000;
 
 export interface ConnectorOptions {
@@ -191,6 +191,20 @@ export class Connector {
 
   /** Re-reads the database and sends what changed. Calls that overlap are merged into one extra read. */
   refresh(): Promise<void> {
+    // Nothing sent yet (e.g. Full Disk Access was granted after connecting): start over with a full snapshot.
+    if (!this.last && this.ws?.readyState === WebSocket.OPEN && !this.reading) {
+      this.reading = (async () => {
+        await this.sendFull();
+        if (this.last) {
+          this.watcher?.close();
+          this.watcher = null;
+          this.ensureWatching();
+        }
+      })().finally(() => {
+        this.reading = null;
+      });
+      return this.reading;
+    }
     if (this.reading) {
       this.rereadQueued = true;
       return this.reading;
