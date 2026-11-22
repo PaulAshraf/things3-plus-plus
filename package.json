@@ -4,8 +4,9 @@
   "description": "Open-source extensions and helpers that make Things 3 more powerful.",
   "license": "MIT",
   "type": "module",
+  "packageManager": "pnpm@10.34.6",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "pnpm -r build",

@@ -1,0 +1,78 @@
+name: Release npm
+
+# Publishes packages/mcp to npm as `things3pp` on every push to master that touches it.
+# npm trusted publishing: GitHub's OIDC token proves this workflow, so no npm token is stored.
+# One-time setup: docs/release-setup.md.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "packages/mcp/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # npm trusted publishing (and provenance, since the repository is public).
+  id-token: write
+
+concurrency:
+  group: release-npm
+  # Never cancel a run that may be halfway through publishing.
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/master'
+    # Things only exists on macOS, and the package declares "os": ["darwin"].
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          # Corepack supplies pnpm in the next step, after this action runs.
+          package-manager-cache: false
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Set release version
+        id: version
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const file = 'packages/mcp/package.json';
+          const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const [major, minor] = manifest.version.split('.');
+          const version = `${major}.${minor}.${process.env.GITHUB_RUN_NUMBER}`;
+          manifest.version = version;
+          fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          NODE
+      - name: Check the version isn't already published
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if npm view "things3pp@${RELEASE_VERSION}" version >/dev/null 2>&1; then
+            echo "::error::things3pp@${RELEASE_VERSION} is already on npm. Re-running a run reuses its version; push or dispatch a new run instead."
+            exit 1
+          fi
+      - name: Build
+        run: pnpm --filter things3pp build
+      - name: Publish to npm
+        # Skipped until the repository variable NPM_PUBLISH is "true", set once the trusted
+        # publisher (PaulAshraf/things3-plus-plus, release.yml) is configured on npmjs.com.
+        if: vars.NPM_PUBLISH == 'true'
+        working-directory: packages/mcp
+        run: |
+          # Trusted publishing needs npm 11.5.1+. Typecheck, tests and build already ran above.
+          npx --yes npm@11.6.2 publish --access public --ignore-scripts
+          echo "Published things3pp@${{ steps.version.outputs.version }}"
