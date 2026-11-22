@@ -12,7 +12,7 @@ Guide for AI coding agents working in this repo. Human-facing docs live in the R
 
 ## Commands
 
-Run from the repo root unless noted. Node ≥ 20, pnpm.
+Run from the repo root unless noted. Developing needs Node ≥ 22.12 (`.nvmrc`) and pnpm 10 through Corepack (`corepack enable`). The published package itself runs on Node ≥ 20.
 
 ```bash
 pnpm install
@@ -93,6 +93,12 @@ Stack: TypeScript 7 (`tsc` for the server, esbuild for the UI), MCP TypeScript S
 - `test/live.test.ts` is opt-in (`THINGS_LIVE=1`). It creates one to-do titled `[things3pp live test …]` and trashes it in `afterAll`. Never write live tests that modify existing user data.
 - HTTP tests call `createHttpApp().fetch()` directly, plus one loopback test using the real SDK client.
 - `test/e2e/` (opt-in, `THINGS_E2E=1`) runs the built `dist` end to end. It needs Things, Tailscale and Google Chrome. Items it creates are prefixed `[things3pp e2e` and trashed afterwards. Setup tests use a temporary `HOME` and `THINGS3PP_CONFIG_DIR`, so they never touch real configs or the real token.
+
+## Releasing
+
+- `.github/workflows/release.yml` publishes `packages/mcp` to npm on every push to `master` that touches it, using npm trusted publishing (OIDC, no token). The version is `<major>.<minor>.<run number>`. Bump major or minor in `packages/mcp/package.json`; never hand-edit the patch.
+- Publishing is skipped unless the repository variable `NPM_PUBLISH` is `true`. One-time setup and rollback: `docs/release-setup.md`.
+- Don't run `npm publish` yourself, and don't add npm tokens to the repo or to Actions secrets.
 
 ## Adding a new package
 
