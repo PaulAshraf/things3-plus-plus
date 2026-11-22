@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>things3pp · Things 3 in any browser and every AI app</title>
+    <meta name="description" content="Free, open-source companion for Things 3. Open your to-dos in any browser, and use them from Claude, Codex and ChatGPT." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111112" media="(prefers-color-scheme: dark)" />
+    <meta property="og:title" content="things3pp" />
+    <meta property="og:description" content="Things 3 in any browser and every AI app. Free and open source." />
+    <meta property="og:image" content="/shots/today-light.webp" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header class="wrap top">
+      <a class="brand" href="/"><img src="/icon.svg" alt="" width="24" height="24" />things3pp</a>
+      <a class="quiet" href="https://github.com/PaulAshraf/things3-plus-plus">GitHub</a>
+    </header>
+
+    <main>
+      <section class="wrap hero">
+        <h1>Things 3, in any browser<br />and every AI app.</h1>
+        <p class="sub">
+          Open your to-dos on any computer or phone. Ask Claude what's on today, or have Codex add a task while you work.
+          Free and open source.
+        </p>
+        <div class="install">
+          <div class="cmd"><code>npx -y things3pp cloud deploy</code><button type="button" class="copy-btn" data-copy="npx -y things3pp cloud deploy">Copy</button></div>
+          <a class="quiet" href="#free">How setup works ↓</a>
+        </div>
+        <figure class="shot hero-shot">
+          <picture>
+            <source srcset="/shots/today-dark.webp" media="(prefers-color-scheme: dark)" />
+            <img src="/shots/today-light.webp" width="1360" height="860" alt="things3pp in a browser: Today, This Evening, deadlines and the project sidebar." />
+          </picture>
+        </figure>
+      </section>
+
+      <section class="wrap band">
+        <div class="text">
+          <h2>Open it anywhere.</h2>
+          <p>
+            Your work laptop, a friend's computer, your phone. Sign in with a passkey and everything is there: Today, Upcoming,
+            projects, checklists. It stays in sync with Things on your Mac, both ways, within a second or so.
+          </p>
+        </div>
+        <div class="pair">
+          <figure class="shot"><img src="/shots/upcoming-dark.webp" width="1360" height="860" loading="lazy" alt="Upcoming in dark mode, grouped by day." /></figure>
+          <figure class="phone"><img src="/shots/phone-today.webp" width="390" height="844" loading="lazy" alt="Today on a phone." /></figure>
+        </div>
+      </section>
+
+      <section class="wrap band">
+        <div class="text">
+          <h2>Ask your AI. It knows your lists.</h2>
+          <p>
+            things3pp is an MCP server, so AI apps can read and change your Things. Where the app supports it, your list shows up
+            right in the chat and you can tick things off there.
+          </p>
+        </div>
+
+        <div class="duo">
+          <div class="panel chat" aria-label="Example in Claude">
+            <div class="panel-label">Claude</div>
+            <p class="msg me">What's on my plate today?</p>
+            <p class="msg">Seven things. The Northwind invoice is a day overdue, so I'd start there.</p>
+            <div class="things-card">
+              <div class="tc-head"><span class="tc-star">★</span>Today</div>
+              <div class="tc-row"><i class="cb due"></i>Send invoice to Northwind<em class="red">1 day ago</em></div>
+              <div class="tc-row"><i class="cb"></i>Call the plumber about the tap<em class="tag">Home</em></div>
+              <div class="tc-row done"><i class="cb on"></i>Review homepage wireframes</div>
+              <div class="tc-row"><i class="cb"></i>Book flights<em class="red">2 days left</em></div>
+            </div>
+            <p class="msg me">Push the plumber call to Thursday.</p>
+            <p class="msg">Done. It's on Thursday now.</p>
+          </div>
+
+          <div class="panel term" aria-label="Example in Codex">
+            <div class="panel-label">Codex</div>
+<pre><span class="dim">~/code/site</span> <span class="acc">›</span> fix the header on mobile, then add a to-do
+  to write release notes by Friday
+
+<span class="dim">…</span> edited src/header.css (+6 −2)
+<span class="dim">…</span> things.add_todo
+    title    <span class="str">"Write release notes"</span>
+    when     <span class="str">"today"</span>
+    deadline <span class="str">"friday"</span>
+
+<span class="ok">✓</span> Header fixed. Added <span class="str">“Write release notes”</span>
+  to Today in Things, due Friday.</pre>
+          </div>
+        </div>
+
+        <p class="fine">
+          Works with Claude, Claude Code, Codex, ChatGPT, Cursor, VS Code and anything else that speaks MCP. From your Mac, or from
+          Claude.ai and ChatGPT on the web. AI apps can add, schedule and complete to-dos. They can't delete anything.
+        </p>
+      </section>
+
+      <section class="wrap band free" id="free">
+        <div class="text">
+          <h2>Free. No catch.</h2>
+          <p>
+            No subscription and no account with us. It runs on your Mac and a free Cloudflare account that only you control, so your
+            to-dos never touch our servers. We don't have any. The code is MIT-licensed.
+          </p>
+        </div>
+        <ol class="steps">
+          <li>
+            <span>Put the web app and MCP server on your Cloudflare account.</span>
+            <div class="cmd"><code>npx -y things3pp cloud deploy</code><button type="button" class="copy-btn" data-copy="npx -y things3pp cloud deploy">Copy</button></div>
+          </li>
+          <li>
+            <span>Link your Mac and create your passkey.</span>
+            <div class="cmd"><code>npx -y things3pp connect</code><button type="button" class="copy-btn" data-copy="npx -y things3pp connect">Copy</button></div>
+          </li>
+          <li>
+            <span>Or skip the browser and just connect the AI apps on your Mac.</span>
+            <div class="cmd"><code>npx -y things3pp mcp setup</code><button type="button" class="copy-btn" data-copy="npx -y things3pp mcp setup">Copy</button></div>
+          </li>
+        </ol>
+        <p class="fine">Needs a Mac with Things 3 and Node.js 22. The cloud steps also need a free Cloudflare account and its <code>cf</code> CLI.</p>
+      </section>
+    </main>
+
+    <footer class="wrap foot">
+      <span>things3pp · <a href="https://github.com/PaulAshraf/things3-plus-plus">Source on GitHub</a></span>
+      <span>Not affiliated with Cultured Code. Things is their trademark.</span>
+    </footer>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
