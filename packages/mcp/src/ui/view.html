@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Things</title>
+    <style>
+      /* Host variables (MCP Apps) win; the fallbacks give a Things-like look anywhere else. */
+      :root {
+        --t-bg: var(--color-background-primary, #ffffff);
+        --t-bg-soft: var(--color-background-secondary, #f6f7f9);
+        --t-text: var(--color-text-primary, #1d1f24);
+        --t-muted: var(--color-text-secondary, #8a8f98);
+        --t-faint: var(--color-text-tertiary, #b4b8bf);
+        --t-line: var(--color-border-tertiary, #ececef);
+        --t-ring: var(--color-ring-primary, #1c7cf4);
+        --t-blue: #1c7cf4;
+        --t-yellow: #f5c518;
+        --t-red: #e5484d;
+        --t-green: #30a46c;
+        --t-teal: #12a594;
+        --t-sand: #c2a878;
+        --t-radius: var(--border-radius-lg, 12px);
+        --t-font: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --t-bg: var(--color-background-primary, #1c1d21);
+          --t-bg-soft: var(--color-background-secondary, #25262b);
+          --t-text: var(--color-text-primary, #eceef1);
+          --t-muted: var(--color-text-secondary, #8e939c);
+          --t-faint: var(--color-text-tertiary, #5c6069);
+          --t-line: var(--color-border-tertiary, #2e3036);
+        }
+      }
+      :root[data-theme="dark"] {
+        --t-bg: var(--color-background-primary, #1c1d21);
+        --t-bg-soft: var(--color-background-secondary, #25262b);
+        --t-text: var(--color-text-primary, #eceef1);
+        --t-muted: var(--color-text-secondary, #8e939c);
+        --t-faint: var(--color-text-tertiary, #5c6069);
+        --t-line: var(--color-border-tertiary, #2e3036);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--t-bg); }
+      body {
+        font-family: var(--t-font);
+        font-size: 14px;
+        line-height: 1.4;
+        color: var(--t-text);
+        -webkit-font-smoothing: antialiased;
+      }
+      button { font: inherit; color: inherit; }
+      .app { padding: 18px 20px 14px; max-width: 760px; }
+
+      /* header */
+      .head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+      .head .icon { width: 22px; height: 22px; flex: none; }
+      .head h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .head .count { color: var(--t-muted); font-weight: 500; font-size: 13px; margin-left: 6px; }
+      .ghost {
+        border: 0; background: transparent; border-radius: 8px; padding: 6px 8px; cursor: pointer;
+        color: var(--t-muted); display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+      }
+      .ghost:hover { background: var(--t-bg-soft); color: var(--t-text); }
+      .ghost:focus-visible, .check:focus-visible, .row-main:focus-visible { outline: 2px solid var(--t-ring); outline-offset: 2px; }
+      .ghost svg { width: 15px; height: 15px; }
+      .spin svg { animation: spin 0.8s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* groups */
+      .group { margin-top: 14px; }
+      .group:first-of-type { margin-top: 4px; }
+      .group-title {
+        display: flex; align-items: center; gap: 6px; font-weight: 650; font-size: 13px;
+        padding: 0 0 6px 2px; border-bottom: 1px solid var(--t-line); margin-bottom: 2px;
+      }
+      .group-title .sub { color: var(--t-muted); font-weight: 500; }
+
+      /* rows */
+      .row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 4px; border-radius: 8px; transition: opacity 0.35s ease, background 0.15s; }
+      .row:hover { background: var(--t-bg-soft); }
+      .row.done .title { color: var(--t-muted); text-decoration: line-through; text-decoration-color: var(--t-faint); }
+      .row.leaving { opacity: 0.35; }
+      .check {
+        flex: none; width: 17px; height: 17px; margin-top: 1.5px; border-radius: 4.5px; cursor: pointer; padding: 0;
+        border: 1.5px solid var(--t-faint); background: var(--t-bg); display: grid; place-items: center;
+        transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      }
+      .check:hover { border-color: var(--t-blue); }
+      .check:active { transform: scale(0.9); }
+      .check svg { width: 11px; height: 11px; opacity: 0; color: #fff; }
+      .check.on { background: var(--t-blue); border-color: var(--t-blue); }
+      .check.on svg { opacity: 1; }
+      .check.canceled { background: var(--t-faint); border-color: var(--t-faint); }
+      .check.project { border-radius: 50%; }
+      .check[disabled] { cursor: progress; opacity: 0.6; }
+
+      .row-main { flex: 1; min-width: 0; background: none; border: 0; padding: 0; text-align: left; cursor: default; }
+      .row-main.has-notes { cursor: pointer; }
+      .title { font-size: 14px; word-wrap: break-word; }
+      .title .star { color: var(--t-yellow); margin-right: 4px; }
+      .title .notes-hint { display: inline-block; width: 12px; height: 12px; margin-left: 5px; vertical-align: -1px; color: var(--t-faint); }
+      .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 2px; color: var(--t-muted); font-size: 12px; }
+      .tag {
+        display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 17px;
+        background: var(--t-bg-soft); color: var(--t-muted); border: 1px solid var(--t-line);
+      }
+      .notes { white-space: pre-wrap; color: var(--t-muted); font-size: 12.5px; margin-top: 6px; display: none; overflow-wrap: anywhere; }
+      .row.open .notes { display: block; }
+
+      .side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; color: var(--t-muted); padding-top: 1px; }
+      .badge { white-space: nowrap; }
+      .deadline { color: var(--t-muted); white-space: nowrap; }
+      .deadline.urgent { color: var(--t-red); font-weight: 600; }
+      .deadline svg { width: 11px; height: 11px; vertical-align: -1px; margin-right: 3px; }
+
+      /* single item card */
+      .card { border: 1px solid var(--t-line); border-radius: var(--t-radius); padding: 16px 16px 12px; background: var(--t-bg); }
+      .card .eyebrow { font-size: 12px; color: var(--t-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+      .card .eyebrow svg { width: 14px; height: 14px; }
+      .card .top { display: flex; gap: 12px; align-items: flex-start; }
+      .card .top .title { font-size: 17px; font-weight: 600; }
+      .card .notes { display: block; font-size: 13.5px; color: var(--t-text); opacity: 0.85; margin: 10px 0 0 29px; }
+      .props { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 14px 0 4px 29px; font-size: 13px; }
+      .props dt { color: var(--t-muted); }
+      .props dd { margin: 0; }
+      .card .actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+      .empty { color: var(--t-muted); text-align: center; padding: 26px 0 18px; }
+      .empty .big { font-size: 26px; display: block; margin-bottom: 4px; }
+      .more { color: var(--t-muted); font-size: 12px; padding: 10px 4px 0; }
+      .toast { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); background: var(--t-text); color: var(--t-bg); padding: 8px 12px; border-radius: 8px; font-size: 12.5px; max-width: 90%; }
+      .loading { color: var(--t-muted); padding: 18px 0; }
+      @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="app"><div class="loading">Loading Things…</div></div>
+    <!--SCRIPT-->
+  </body>
+</html>
