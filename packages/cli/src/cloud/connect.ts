@@ -2,6 +2,7 @@
 import { execFile } from "node:child_process";
 import { c, fail, info, ok, warn } from "../cli/ui.js";
 import { recoverText } from "things3pp-core/relay/protocol";
+import { thingsInstalled } from "../cli/checks.js";
 import { ensureDeviceKey, loadCloudConfig, normalizeUrl, saveCloudConfig, signWithDevice } from "./config.js";
 
 interface StartResponse {
@@ -30,6 +31,14 @@ export async function connect(opts: { url?: string; open: boolean }): Promise<nu
     return 1;
   }
   const url = normalizeUrl(raw);
+  const linkedHere = cfg.url === url && cfg.device?.deviceId && cfg.device.accountId;
+  if (!(process.platform === "darwin" && thingsInstalled()) && !linkedHere) {
+    // Pairing is only for the Mac that runs Things. Other computers just point their AI apps at the hosted MCP.
+    fail(`Things 3 isn't installed here, so there's nothing for this ${process.platform === "darwin" ? "Mac" : "computer"} to sync.`);
+    console.log(`  Only link the Mac that has Things. To use your hosted Things from AI apps on this computer, run:`);
+    console.log(`    ${c.cyan(`things3pp mcp setup --url ${url}`)}\n`);
+    return 1;
+  }
   if (cfg.url && cfg.url !== url && cfg.device) {
     // A different deployment: start over with a fresh device identity.
     delete cfg.device;

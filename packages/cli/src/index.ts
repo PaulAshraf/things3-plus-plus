@@ -7,7 +7,7 @@ const HELP = `things3pp ${VERSION} — Things 3 for AI apps and the web
 Usage
   things3pp mcp …        Use Things from AI apps on this Mac (run "things3pp mcp help")
   things3pp cloud …      Your own hosted Things web app + remote MCP on Cloudflare (run "things3pp cloud help")
-  things3pp connect      Link this Mac to your hosted Things (shows a pairing code)
+  things3pp connect      Link the Mac that runs Things to your hosted Things (shows a pairing code)
   things3pp agent …      Keep this Mac connected in the background (install, uninstall, status)
   things3pp doctor       Check that everything is working
 
@@ -17,8 +17,13 @@ const MCP_HELP = `things3pp mcp — use Things from AI apps
 
 Usage
   things3pp mcp              Run as an MCP server over stdio (what AI apps call)
-  things3pp mcp setup        Connect Things to the AI apps on this Mac
+  things3pp mcp setup        Connect Things to the AI apps on this computer
       -y, --yes                  Don't ask before changing each app's settings
+      --url <address>            Use your hosted Things instead of a local Things 3
+                                 (e.g. https://things.example.com). No Things, pairing or
+                                 device key needed here; each app signs in with your passkey.
+      --hosted                   Same, with the address this computer already knows
+                                 (used automatically when Things 3 isn't installed)
   things3pp mcp doctor       Check the local MCP setup
   things3pp mcp serve        Share Things with AI apps on your other computers (via Tailscale)
       --port <n>                 Port to listen on (default 7766)
@@ -72,9 +77,16 @@ async function mcp(argv: string[]): Promise<number> {
     return 0;
   }
   if (command === "setup") {
-    const { values } = parseArgs({ args: rest, options: { yes: { type: "boolean", short: "y", default: false } } });
+    const { values } = parseArgs({
+      args: rest,
+      options: {
+        yes: { type: "boolean", short: "y", default: false },
+        hosted: { type: "boolean", default: false },
+        url: { type: "string" },
+      },
+    });
     const { setup } = await import("./cli/setup.js");
-    return setup({ yes: Boolean(values.yes) });
+    return setup({ yes: Boolean(values.yes), hosted: Boolean(values.hosted), url: values.url });
   }
   if (command === "doctor") {
     const { doctor } = await import("./cli/doctor.js");
