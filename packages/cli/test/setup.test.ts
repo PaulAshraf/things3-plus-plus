@@ -75,8 +75,9 @@ describe("mcp setup with hosted Things", () => {
     const claudeArgs = readFileSync(join(home, "claude-args"), "utf8");
     expect(claudeArgs).toContain("mcp add --transport http --scope user things https://things.example.com/mcp");
     expect(claudeArgs).not.toMatch(/--header|Authorization/);
-    // No device key or cloud config is created on a client-only computer.
-    expect(existsSync(join(process.env.THINGS3PP_CONFIG_DIR!, "cloud.json"))).toBe(false);
+    // Only the address is remembered (for doctor and later runs): no device key on a client-only computer.
+    const cloud = JSON.parse(readFileSync(join(process.env.THINGS3PP_CONFIG_DIR!, "cloud.json"), "utf8"));
+    expect(cloud).toEqual({ url: "https://things.example.com" });
     expect(output()).toContain("codex mcp login things");
   });
 

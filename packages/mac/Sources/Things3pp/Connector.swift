@@ -107,7 +107,8 @@ final class Connector: NSObject, URLSessionWebSocketDelegate {
           }
           self.receive(t)
         case .failure:
-          self.reconnect(reason: nil)
+          // The close code may already be known here; handle it once, before didClose (which then sees task == nil).
+          self.closed(code: t.closeCode.rawValue, reason: t.closeReason)
         }
       }
     }
@@ -116,22 +117,40 @@ final class Connector: NSObject, URLSessionWebSocketDelegate {
   func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
     queue.async {
       guard webSocketTask === self.task else { return }
-      if closeCode.rawValue == 4003 {
-        self.log("This Mac isn't recognised anymore (removed, or a different server). Sign in again.")
-        self.stopped = true
-        self.status(.revoked)
-        return
-      }
-      self.reconnect(reason: reason.flatMap { String(data: $0, encoding: .utf8) })
+      self.closed(code: closeCode.rawValue, reason: reason)
     }
   }
 
-  private func reconnect(reason: String?) {
+  /// Handles a closed socket (from either the receive failure or didClose; whichever comes first).
+  private func closed(code: Int, reason: Data?) {
+    if code == 4003 {
+      pingTimer?.cancel()
+      task = nil
+      log("This Mac isn't recognised anymore (removed, or a different server). Sign in again.")
+      stopped = true
+      status(.revoked)
+      return
+    }
+    let text = reason.flatMap { String(data: $0, encoding: .utf8) }
+    if code == 4010 {
+      // Another linked Mac holds the connection. Stand by instead of fighting over it.
+      let why = (text?.isEmpty == false ? text! : "Another Mac is already connected")
+      log("\(why). Only one Mac can sync at a time; trying again in a minute.")
+      reconnect(reason: why, after: Connector.standby)
+      return
+    }
+    reconnect(reason: text?.isEmpty == false ? text : nil)
+  }
+
+  /// How long to wait when another linked Mac holds the connection (close code 4010).
+  static let standby: TimeInterval = 60
+
+  private func reconnect(reason: String?, after fixedWait: TimeInterval? = nil) {
     pingTimer?.cancel()
     task = nil
     guard !stopped else { return }
-    let wait = min(backoff, 60)
-    backoff = min(backoff * 2, 60)
+    let wait = fixedWait ?? min(backoff, 60)
+    if fixedWait == nil { backoff = min(backoff * 2, 60) }
     status(.offline(reason ?? "Can't reach \(URL(string: identity.serverURL)?.host ?? "the server")"))
     queue.asyncAfter(deadline: .now() + wait) { self.connect() }
   }

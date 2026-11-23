@@ -205,9 +205,14 @@ export function Pair({ code: initialCode }: { code: string }) {
                 This Things isn't set up yet, and this pairing can't set it up. Run <b>things3pp cloud deploy</b> and then <b>things3pp connect</b> on the same Mac.
               </div>
             ) : (
-              <button class="btn" disabled={busy} onClick={approve}>
-                <IconKey /> {busy ? "Waiting…" : info.signedIn ? "Link this Mac" : "Sign in with passkey to link"}
-              </button>
+              <>
+                <div class="warn-box">
+                  Only link the Mac that has Things. Your other Macs don't need linking: sign in to this web app there, and add the MCP address from Settings to their AI apps.
+                </div>
+                <button class="btn" disabled={busy} onClick={approve}>
+                  <IconKey /> {busy ? "Waiting…" : info.signedIn ? "Link this Mac" : "Sign in with passkey to link"}
+                </button>
+              </>
             )}
             <p class="fine">Didn't run things3pp connect yourself? Close this page.</p>
           </>

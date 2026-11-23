@@ -16,6 +16,8 @@ import { signWithDevice, type CloudConfig } from "./config.js";
 
 const POLL_MS = 30_000;
 const PING_MS = 30_000;
+/** How long to wait when another linked Mac holds the connection (close code 4010). */
+const STANDBY_MS = 60_000;
 
 export interface ConnectorOptions {
   config: Required<Pick<CloudConfig, "url">> & { device: NonNullable<CloudConfig["device"]> };
@@ -108,6 +110,12 @@ export class Connector {
         this.log("This Mac isn't recognised anymore (removed, or a different deployment). Run things3pp connect again.");
         this.stop();
         process.exitCode = 1;
+        return;
+      }
+      if (ev.code === 4010) {
+        // Another linked Mac is connected. Stand by quietly instead of fighting over the connection.
+        this.log(`${ev.reason || "Another Mac is already connected"}. Only one Mac can sync at a time; trying again in a minute.`);
+        setTimeout(() => this.connect(), STANDBY_MS);
         return;
       }
       if (authed) this.backoff = 1000;

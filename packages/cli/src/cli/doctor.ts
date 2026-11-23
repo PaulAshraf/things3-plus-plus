@@ -23,18 +23,26 @@ async function cloudChecks(): Promise<number> {
     return 0;
   }
   ok(`Deployment: ${cfg.url}`);
-  if (cfg.device?.deviceId) ok(`This Mac is linked as "${cfg.device.name}"`);
+  if (!thingsInstalled()) {
+    // Not the Things Mac: it should use the web app and remote MCP, and must not be linked.
+    if (cfg.device?.deviceId) {
+      warn(`This Mac is linked as "${cfg.device.name}" but has no Things, so it can't sync. Run ${c.cyan("things3pp disconnect")} and ${c.cyan("things3pp agent uninstall")}.`);
+      problems++;
+    } else ok("This Mac uses the web app and remote MCP (only the Mac with Things syncs)");
+  } else if (cfg.device?.deviceId) ok(`This Mac is linked as "${cfg.device.name}"`);
   else (warn(`This Mac isn't linked — run ${c.cyan("things3pp connect")}`), problems++);
-  try {
-    const db = findThingsDatabase();
-    const snap = await readSnapshot(db);
-    ok(`Things database readable (${snap.tasks.length} items${snap.capabilities.urlScheme ? "" : ", Things URLs off"})`);
-    if (!snap.capabilities.urlScheme) {
-      warn('Turn on Things → Settings → General → "Enable Things URLs" so the web app can edit checklists and This Evening.');
+  if (thingsInstalled()) {
+    try {
+      const db = findThingsDatabase();
+      const snap = await readSnapshot(db);
+      ok(`Things database readable (${snap.tasks.length} items${snap.capabilities.urlScheme ? "" : ", Things URLs off"})`);
+      if (!snap.capabilities.urlScheme) {
+        warn('Turn on Things → Settings → General → "Enable Things URLs" so the web app can edit checklists and This Evening.');
+      }
+    } catch (e) {
+      fail(e instanceof DatabaseError ? e.message : `Couldn't read the Things database: ${(e as Error).message}`);
+      problems++;
     }
-  } catch (e) {
-    fail(e instanceof DatabaseError ? e.message : `Couldn't read the Things database: ${(e as Error).message}`);
-    problems++;
   }
   try {
     const res = await fetch(`${cfg.url}/api/state`);
@@ -57,12 +65,25 @@ export async function doctor(opts: { cloud?: boolean } = {}): Promise<number> {
   if (nodeVersionOk()) ok(`Node.js ${process.versions.node}`);
   else (fail(`Node.js ${process.versions.node} — version 20 or newer is required.`), problems++);
 
-  if (thingsInstalled()) ok("Things 3 installed");
-  else (fail("Things 3 not found in /Applications."), problems++);
-
-  const access = await checkThingsAccess();
-  if (access.ok) ok(`Things ${access.version} is reachable from this terminal`);
-  else (fail(access.message), problems++);
+  const hasThings = thingsInstalled();
+  let hostedUrl: string | undefined;
+  try {
+    hostedUrl = loadCloudConfig().url;
+  } catch {
+    /* reported in the hosted section */
+  }
+  if (hasThings) {
+    ok("Things 3 installed");
+    const access = await checkThingsAccess();
+    if (access.ok) ok(`Things ${access.version} is reachable from this terminal`);
+    else (fail(access.message), problems++);
+  } else if (hostedUrl) {
+    // A second Mac: no Things here, it uses the hosted Things (web app + remote MCP).
+    info(`Things 3 isn't on this Mac. It uses your hosted Things at ${hostedUrl}.`);
+  } else {
+    fail("Things 3 not found in /Applications.");
+    problems++;
+  }
 
   console.log(`\n${c.bold("AI apps")}`);
   for (const client of allClients()) {

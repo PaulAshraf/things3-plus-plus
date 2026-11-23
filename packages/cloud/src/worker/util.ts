@@ -69,3 +69,28 @@ export async function verifyEd25519(publicKeyB64url: string, signatureB64url: st
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
+
+/** A Mac socket with no ping or message for this long is treated as gone (Macs ping every 30 s). */
+export const MAC_STALE_MS = 75_000;
+
+export interface MacSocketInfo {
+  deviceId?: string;
+  name?: string;
+  /** The device's last reported problem (null when healthy). */
+  problem: string | null;
+  /** Newest of: socket opened, last message, last keep-alive ping. */
+  lastActive: number;
+}
+
+/**
+ * Who keeps the account's one Mac connection when `deviceId` authenticates. Returns the name of a
+ * different Mac that is connected, recently active and healthy (the newcomer must wait), or null
+ * (the newcomer takes over). The same Mac reconnecting always replaces its old socket.
+ */
+export function macHolder(sockets: MacSocketInfo[], deviceId: string, now: number): string | null {
+  for (const s of sockets) {
+    if (!s.deviceId || s.deviceId === deviceId || s.problem !== null) continue;
+    if (now - s.lastActive < MAC_STALE_MS) return s.name ?? "another Mac";
+  }
+  return null;
+}

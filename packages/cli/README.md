@@ -166,6 +166,8 @@ It adds the remote MCP server (`…/mcp`) to the AI apps it finds, asking first 
 - **VS Code:** click **Allow** when it asks you to sign in.
 - **Claude Desktop:** its settings file can't hold remote servers, so add it in the app: Settings → Connectors → **Add custom connector**, and paste the address.
 
+Don't link the second Mac (`things3pp connect` or signing in from the menu-bar app): only the Mac with Things syncs. On a Mac without Things, the agent and the menu-bar app never sync, so they can't get in the way. If one was linked by mistake, run `things3pp disconnect` there (or **Sign Out of This Mac** in the menu-bar app) and remove it in Settings.
+
 If the second Mac already has the hosted address saved, plain `things3pp mcp setup` uses it automatically when Things 3 is absent. Use `--hosted` to select the saved address explicitly. On Linux or Windows, add the `/mcp` URL directly in your AI app.
 
 **Good to know**
