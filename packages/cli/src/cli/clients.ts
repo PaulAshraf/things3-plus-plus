@@ -34,14 +34,33 @@ export function launchCommand(): LaunchCommand {
   };
 }
 
+/**
+ * A hosted Things deployment's remote MCP endpoint (`https://…/mcp`). Apps reach it over HTTP and sign
+ * in with OAuth (a passkey in the browser), so no token, pairing or device key is ever written here.
+ */
+export interface RemoteServer {
+  url: string;
+}
+
+/** What setup writes into an app: a local stdio command, or a hosted remote URL. */
+export type ServerTarget = LaunchCommand | RemoteServer;
+
+export function isRemote(target: ServerTarget): target is RemoteServer {
+  return "url" in target;
+}
+
 export interface ClientTarget {
   id: string;
   name: string;
   detected: boolean;
   /** Where the config lives (for messages). */
   location: string;
+  /** False when the app can't take a remote server from its config file (it's added in the app instead). */
+  supportsRemote: boolean;
+  /** For remote servers: how to finish signing in, or (when unsupported) how to add it by hand. */
+  remoteHint(url: string): string;
   isConfigured(): boolean;
-  install(launch: LaunchCommand): Promise<string>;
+  install(target: ServerTarget): Promise<string>;
 }
 
 function readJson(path: string): Record<string, unknown> {
@@ -68,21 +87,41 @@ function writeJson(path: string, data: unknown) {
   writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
 }
 
+interface JsonClientOptions {
+  key?: string;
+  /** Extra fields for a stdio entry (VS Code wants `type: "stdio"`). */
+  stdioExtra?: object;
+  /** Builds the entry for a remote server, or null if the app's config file can't hold one. */
+  remoteEntry?: ((url: string) => object) | null;
+  remoteHint: (url: string) => string;
+}
+
 /** Apps that use the common `{ "mcpServers": { name: { command, args, env } } }` shape. */
-function jsonClient(id: string, name: string, path: string, appDir: string, key = "mcpServers", extra: object = {}): ClientTarget {
+function jsonClient(id: string, name: string, path: string, appDir: string, opts: JsonClientOptions): ClientTarget {
+  const key = opts.key ?? "mcpServers";
+  const remoteEntry = opts.remoteEntry ?? null;
   return {
     id,
     name,
     location: path,
     detected: existsSync(appDir),
+    supportsRemote: Boolean(remoteEntry),
+    remoteHint: opts.remoteHint,
     isConfigured() {
       const servers = readJson(path)[key] as Record<string, unknown> | undefined;
       return Boolean(servers && SERVER_NAME in servers);
     },
-    async install(launch) {
+    async install(target) {
+      let entry: object;
+      if (isRemote(target)) {
+        if (!remoteEntry) throw new Error(opts.remoteHint(target.url));
+        entry = remoteEntry(target.url);
+      } else {
+        entry = { ...opts.stdioExtra, command: target.command, args: target.args, ...(target.env ? { env: target.env } : {}) };
+      }
       const config = readJson(path);
       const servers = (config[key] as Record<string, unknown> | undefined) ?? {};
-      servers[SERVER_NAME] = { ...extra, command: launch.command, args: launch.args, ...(launch.env ? { env: launch.env } : {}) };
+      servers[SERVER_NAME] = entry;
       config[key] = servers;
       const saved = backup(path);
       writeJson(path, config);
@@ -113,17 +152,33 @@ function claudeCode(): ClientTarget {
     name: "Claude Code",
     location: "claude mcp (user scope)",
     detected: Boolean(cli),
+    supportsRemote: true,
+    remoteHint: () => `In Claude Code, run ${"`/mcp`"}, pick "${SERVER_NAME}" and choose Authenticate.`,
     isConfigured() {
       const servers = readJson(userConfig).mcpServers as Record<string, unknown> | undefined;
       return Boolean(servers && SERVER_NAME in servers);
     },
-    async install(launch) {
+    async install(target) {
       if (!cli) throw new Error("claude CLI not found");
-      const envArgs = Object.entries(launch.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
+      readJson(userConfig);
+      backup(userConfig);
       await run(cli, ["mcp", "remove", SERVER_NAME, "--scope", "user"]);
-      const res = await run(cli, ["mcp", "add", SERVER_NAME, "--scope", "user", ...envArgs, "--", launch.command, ...launch.args]);
+      const args = isRemote(target)
+        ? ["mcp", "add", "--transport", "http", "--scope", "user", SERVER_NAME, target.url]
+        : [
+            "mcp",
+            "add",
+            SERVER_NAME,
+            "--scope",
+            "user",
+            ...Object.entries(target.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+            "--",
+            target.command,
+            ...target.args,
+          ];
+      const res = await run(cli, args);
       if (!res.ok) throw new Error(res.out || "claude mcp add failed");
-      return "added with `claude mcp add --scope user`";
+      return isRemote(target) ? "added with `claude mcp add --transport http --scope user`" : "added with `claude mcp add --scope user`";
     },
   };
 }
@@ -162,25 +217,27 @@ function codex(): ClientTarget {
     name: "Codex",
     location: path,
     detected: existsSync(dir) || Boolean(which("codex")),
+    supportsRemote: true,
+    remoteHint: () => `Run ${"`codex mcp login " + SERVER_NAME + "`"} to sign in.`,
     isConfigured() {
       return existsSync(path) && readFileSync(path, "utf8").split("\n").some((l) => l.trim() === header);
     },
-    async install(launch) {
+    async install(target) {
       const before = existsSync(path) ? readFileSync(path, "utf8") : "";
       const cleaned = removeOwnCodexBlock(before);
       if (cleaned === null) {
         throw new Error(`${path} already has a ${header} block you added yourself, so I left it alone. Remove it to let setup manage it.`);
       }
-      const lines = [
-        "",
-        CODEX_MARKER,
-        header,
-        `command = ${tomlString(launch.command)}`,
-        `args = [${launch.args.map(tomlString).join(", ")}]`,
-      ];
-      if (launch.env) {
-        lines.push(`[mcp_servers.${SERVER_NAME}.env]`);
-        for (const [k, v] of Object.entries(launch.env)) lines.push(`${k} = ${tomlString(v)}`);
+      const lines = ["", CODEX_MARKER, header];
+      if (isRemote(target)) {
+        // Streamable HTTP; Codex signs in with OAuth via `codex mcp login`.
+        lines.push(`url = ${tomlString(target.url)}`);
+      } else {
+        lines.push(`command = ${tomlString(target.command)}`, `args = [${target.args.map(tomlString).join(", ")}]`);
+        if (target.env) {
+          lines.push(`[mcp_servers.${SERVER_NAME}.env]`);
+          for (const [k, v] of Object.entries(target.env)) lines.push(`${k} = ${tomlString(v)}`);
+        }
       }
       const saved = backup(path);
       mkdirSync(dir, { recursive: true });
@@ -195,10 +252,22 @@ export function allClients(): ClientTarget[] {
   const home = homedir();
   const appSupport = join(home, "Library", "Application Support");
   return [
-    jsonClient("claude-desktop", "Claude Desktop", join(appSupport, "Claude", "claude_desktop_config.json"), join(appSupport, "Claude")),
+    jsonClient("claude-desktop", "Claude Desktop", join(appSupport, "Claude", "claude_desktop_config.json"), join(appSupport, "Claude"), {
+      // Its config file only runs local (stdio) servers. Remote ones are custom connectors, which do OAuth.
+      remoteEntry: null,
+      remoteHint: (url) => `Add it in Claude Desktop: Settings → Connectors → Add custom connector, and paste ${url}`,
+    }),
     claudeCode(),
     codex(),
-    jsonClient("cursor", "Cursor", join(home, ".cursor", "mcp.json"), join(home, ".cursor")),
-    jsonClient("vscode", "VS Code", join(appSupport, "Code", "User", "mcp.json"), join(appSupport, "Code"), "servers", { type: "stdio" }),
+    jsonClient("cursor", "Cursor", join(home, ".cursor", "mcp.json"), join(home, ".cursor"), {
+      remoteEntry: (url) => ({ url }),
+      remoteHint: () => `In Cursor, open Settings → MCP and click Connect next to "${SERVER_NAME}".`,
+    }),
+    jsonClient("vscode", "VS Code", join(appSupport, "Code", "User", "mcp.json"), join(appSupport, "Code"), {
+      key: "servers",
+      stdioExtra: { type: "stdio" },
+      remoteEntry: (url) => ({ type: "http", url }),
+      remoteHint: () => `VS Code asks you to sign in the first time it starts "${SERVER_NAME}". Click Allow.`,
+    }),
   ];
 }

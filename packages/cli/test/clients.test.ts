@@ -108,3 +108,45 @@ describe("tailscale", () => {
     expect(isTailscaleIPv4("100.64.0")).toBe(false);
   });
 });
+
+describe("hosted (remote) entries", () => {
+  const remote = { url: "https://things.example.com/mcp" };
+
+  it("writes only the URL for Cursor, so the app signs in with OAuth", async () => {
+    const dir = join(home, ".cursor");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "mcp.json"), JSON.stringify({ mcpServers: { things: { command: "node", args: ["old"] }, other: { url: "x" } } }));
+    await byId("cursor").install(remote);
+    const cfg = JSON.parse(readFileSync(join(dir, "mcp.json"), "utf8"));
+    expect(cfg.mcpServers.things).toEqual({ url: remote.url });
+    expect(cfg.mcpServers.other).toEqual({ url: "x" });
+  });
+
+  it("uses VS Code's http type without headers", async () => {
+    mkdirSync(join(home, "Library", "Application Support", "Code", "User"), { recursive: true });
+    await byId("vscode").install(remote);
+    const cfg = JSON.parse(readFileSync(join(home, "Library", "Application Support", "Code", "User", "mcp.json"), "utf8"));
+    expect(cfg.servers.things).toEqual({ type: "http", url: remote.url });
+  });
+
+  it("replaces a local Codex block with a url-only block", async () => {
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    const file = join(home, ".codex", "config.toml");
+    const codex = byId("codex");
+    await codex.install({ ...launch, env: { PATH: "/p" } });
+    await codex.install(remote);
+    const toml = readFileSync(file, "utf8");
+    expect(toml.split("[mcp_servers.things]").length).toBe(2);
+    expect(toml).toContain(`url = "${remote.url}"`);
+    expect(toml).not.toMatch(/command =|args =|PATH =|http_headers|bearer/);
+  });
+
+  it("never writes a remote server into Claude Desktop's stdio-only config", async () => {
+    const dir = join(home, "Library", "Application Support", "Claude");
+    mkdirSync(dir, { recursive: true });
+    const desktop = byId("claude-desktop");
+    expect(desktop.supportsRemote).toBe(false);
+    await expect(desktop.install(remote)).rejects.toThrow(/custom connector/);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+});

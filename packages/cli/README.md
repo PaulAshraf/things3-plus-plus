@@ -150,6 +150,24 @@ For full detail, give the `node` that `agent install` prints Full Disk Access. T
 
 To use it from Claude.ai or ChatGPT, add `https://<your-worker>.workers.dev/mcp` as a custom connector. You'll approve it with your passkey. Settings in the web app shows the exact address.
 
+### AI apps on your other computers
+
+On another Mac, run setup with your hosted Things address. The second Mac only needs Node.js and the AI app you want to configure.
+
+```bash
+npx -y things3pp mcp setup --url https://things.example.com   # your hosted Things' address
+```
+
+It adds the remote MCP server (`…/mcp`) to the AI apps it finds, asking first and backing up each settings file. Nothing secret is saved: each app signs in with your passkey the first time it connects.
+
+- **Claude Code:** run `/mcp`, pick `things` and choose **Authenticate**.
+- **Codex:** run `codex mcp login things`.
+- **Cursor:** Settings → MCP, click **Connect** next to `things`.
+- **VS Code:** click **Allow** when it asks you to sign in.
+- **Claude Desktop:** its settings file can't hold remote servers, so add it in the app: Settings → Connectors → **Add custom connector**, and paste the address.
+
+If the second Mac already has the hosted address saved, plain `things3pp mcp setup` uses it automatically when Things 3 is absent. Use `--hosted` to select the saved address explicitly. On Linux or Windows, add the `/mcp` URL directly in your AI app.
+
 **Good to know**
 
 - Your Mac needs to be awake and online for changes. While it sleeps, the web app still shows your lists from the last sync, with a small "offline" note.
@@ -169,12 +187,13 @@ To use it from Claude.ai or ChatGPT, add `https://<your-worker>.workers.dev/mcp`
 | Command | What it does |
 |---|---|
 | `npx -y things3pp mcp setup` | Connect Things to the AI apps on this Mac |
+| `npx -y things3pp mcp setup --url <address>` | Connect the AI apps on this Mac to your hosted Things |
 | `npx -y things3pp mcp doctor` | Check the local MCP setup |
 | `npx -y things3pp mcp serve` | Share Things with your other computers (Tailscale) |
 | `npx -y things3pp mcp token --rotate` | Replace the Tailscale access token |
 | `things3pp cloud deploy [--domain <host>] [--shared]` | Deploy (or update) your own hosted Things on Cloudflare |
 | `things3pp cloud status` / `open` | Show or open your hosted Things |
-| `things3pp connect` | Link this Mac (or add a new passkey if it's already linked) |
+| `things3pp connect` | Link the Mac that runs Things (or add a new passkey if it's already linked) |
 | `things3pp disconnect` | Unlink this Mac and delete its device key |
 | `things3pp agent install` / `uninstall` / `status` | Keep this Mac connected in the background |
 | `things3pp doctor` | Check everything, including the hosted setup |
