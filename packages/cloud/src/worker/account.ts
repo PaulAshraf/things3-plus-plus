@@ -12,7 +12,7 @@ import {
   type MacState,
   type MacToHub,
 } from "things3pp-core/relay/protocol";
-import { randomToken, sha256, verifyEd25519 } from "./util.ts";
+import { macHolder, randomToken, sha256, verifyEd25519 } from "./util.ts";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60_000;
 const CALL_TIMEOUT_MS = 30_000;
@@ -303,6 +303,25 @@ export class Account extends DurableObject {
     return this.ctx.getWebSockets("mac").filter((ws) => (ws.deserializeAttachment() as SocketMeta | null)?.kind === "mac");
   }
 
+  /** Name of a different Mac whose socket is alive and healthy, if any (see macHolder). */
+  private liveOtherMac(deviceId: string): string | null {
+    const holders = this.macSockets().map((ws) => {
+      const meta = ws.deserializeAttachment() as SocketMeta;
+      const row = meta.deviceId
+        ? this.sql
+            .exec<{ name: string; last_seen_at: number | null; problem: string | null }>("SELECT name, last_seen_at, problem FROM devices WHERE id = ?", meta.deviceId)
+            .toArray()[0]
+        : undefined;
+      return {
+        deviceId: meta.deviceId,
+        name: row?.name,
+        problem: row ? row.problem : "unknown device",
+        lastActive: Math.max(meta.openedAt, row?.last_seen_at ?? 0, this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0),
+      };
+    });
+    return macHolder(holders, deviceId, Date.now());
+  }
+
   private send(ws: WebSocket, msg: HubToMac | HubToBrowser) {
     try {
       ws.send(JSON.stringify(msg));
@@ -391,7 +410,18 @@ export class Account extends DurableObject {
         ws.close(4003, "Unknown device or bad signature");
         return;
       }
-      // One live Mac connection per account: the newest wins.
+      // One live Mac connection per account. The same Mac reconnecting replaces its old socket. A
+      // different Mac only takes over when the current one has gone quiet or reports a problem;
+      // otherwise two linked Macs would keep kicking each other off and writes would fail.
+      const holder = this.liveOtherMac(msg.deviceId);
+      if (holder) {
+        // Close reasons are capped at 123 bytes; trim the name by characters until it fits.
+        let name = holder.slice(0, 60);
+        const reason = () => `Another Mac (${name}) is already connected`;
+        while (new TextEncoder().encode(reason()).length > 120) name = name.slice(0, -1);
+        ws.close(4010, reason());
+        return;
+      }
       for (const old of this.macSockets()) old.close(4009, "Replaced by a newer connection");
       ws.serializeAttachment({ kind: "mac", deviceId: msg.deviceId, openedAt: meta.openedAt } satisfies SocketMeta);
       this.sql.exec("UPDATE devices SET last_seen_at = ?, problem = NULL WHERE id = ?", Date.now(), msg.deviceId);
@@ -419,7 +449,7 @@ export class Account extends DurableObject {
       }
       case "status":
         if (meta.deviceId) {
-          this.sql.exec("UPDATE devices SET problem = ?, last_seen_at = ? WHERE id = ?", msg.ok ? null : (msg.message ?? "Problem on the Mac").slice(0, 500), Date.now(), meta.deviceId);
+          this.sql.exec("UPDATE devices SET problem = ?, last_seen_at = ? WHERE id = ?", msg.ok ? null : (msg.message || "Problem on the Mac").slice(0, 500), Date.now(), meta.deviceId);
           this.broadcastMac();
         }
         break;

@@ -1,7 +1,7 @@
 import { allClients, launchCommand, type ClientTarget, type ServerTarget } from "./clients.js";
 import { checkThingsAccess, nodeVersionOk, thingsInstalled } from "./checks.js";
 import { c, confirm, fail, info, ok, warn } from "./ui.js";
-import { loadCloudConfig, normalizeUrl } from "../cloud/config.js";
+import { loadCloudConfig, normalizeUrl, saveCloudConfig } from "../cloud/config.js";
 
 export interface SetupFlags {
   yes: boolean;
@@ -30,6 +30,18 @@ function savedHostedUrl(): string | undefined {
     return loadCloudConfig().url;
   } catch {
     return undefined;
+  }
+}
+
+/** Saves the hosted address (nothing secret) so `doctor` and later runs know it. Never touches a linked Mac's config. */
+function rememberHosted(origin: string) {
+  try {
+    const cfg = loadCloudConfig();
+    if (cfg.device || cfg.url === origin) return;
+    cfg.url = origin;
+    saveCloudConfig(cfg);
+  } catch {
+    /* not essential */
   }
 }
 
@@ -164,8 +176,10 @@ async function hostedSetup(flags: SetupFlags): Promise<number> {
 
   info(`Checking ${new URL(url).origin}…`);
   const probe = await probeHosted(url);
-  if (probe.ok) ok(`Found your hosted Things: ${c.cyan(url)}`);
-  else warn(`${probe.message}\n  ${c.dim("Setting it up anyway; run this again with the right --url if needed.")}`);
+  if (probe.ok) {
+    ok(`Found your hosted Things: ${c.cyan(url)}`);
+    rememberHosted(new URL(url).origin);
+  } else warn(`${probe.message}\n  ${c.dim("Setting it up anyway; run this again with the right --url if needed.")}`);
 
   const clients = allClients();
   const detected = clients.filter((cl) => cl.detected);

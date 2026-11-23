@@ -1,7 +1,10 @@
 import { existsSync } from "node:fs";
 import { ThingsClient, ThingsError } from "things3pp-core/things/client";
 
-export const THINGS_APP_PATHS = ["/Applications/Things3.app", `${process.env.HOME}/Applications/Things3.app`];
+// THINGS3PP_THINGS_APP replaces the usual locations (tests point it at a missing path to act like a Mac without Things).
+export const THINGS_APP_PATHS = process.env.THINGS3PP_THINGS_APP
+  ? [process.env.THINGS3PP_THINGS_APP]
+  : ["/Applications/Things3.app", `${process.env.HOME}/Applications/Things3.app`];
 
 export function thingsInstalled(): boolean {
   return THINGS_APP_PATHS.some((p) => existsSync(p));

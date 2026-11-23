@@ -31,7 +31,16 @@ final class AppState: ObservableObject {
   private var fastPolling = false
 
   var isLinked: Bool { identity?.isLinked == true }
-  var needsSetup: Bool { !isLinked || automation != .granted }
+  /// Only the Mac with Things syncs. Another Mac uses the web app and the remote MCP, and never relays.
+  var isThingsMac: Bool { thingsInstalled }
+  var needsSetup: Bool {
+    if !isThingsMac { return isLinked || cliIdentity != nil || !UserDefaults.standard.bool(forKey: "didShowOtherMacSetup") }
+    return !isLinked || automation != .granted
+  }
+  /// The hosted Things this Mac knows about (its link, or the server field).
+  var hostedURL: String { identity?.serverURL ?? cliIdentity?.serverURL ?? normalized(serverURL) }
+  var mcpURL: String { hostedURL + "/mcp" }
+  var setupCommand: String { "npx -y things3pp mcp setup --url \(hostedURL)" }
 
   init() {
     identity = Keychain.load()
@@ -39,7 +48,7 @@ final class AppState: ObservableObject {
     if identity == nil { cliIdentity = CLIImport.linkedIdentity() }
     refreshPermissions()
     schedulePermissionChecks(fast: false)
-    if isLinked { startConnector() }
+    if isLinked && isThingsMac { startConnector() }
     // First launch: start at login by default.
     if !UserDefaults.standard.bool(forKey: "didSetLoginItem") {
       UserDefaults.standard.set(true, forKey: "didSetLoginItem")
@@ -68,7 +77,11 @@ final class AppState: ObservableObject {
         self.database = db
         self.urlScheme = url
         if auto != .unknown || self.automation == .unknown { self.automation = auto }
-        self.thingsInstalled = installed
+        if installed != self.thingsInstalled {
+          self.thingsInstalled = installed
+          // Things appeared or went away: only sync while it's here.
+          if installed { self.startConnector() } else { self.stopConnector() }
+        }
         if gainedData { self.connector?.poke() }  // switch to full detail right away
       }
     }
@@ -164,9 +177,17 @@ final class AppState: ObservableObject {
 
   // ----- relay -----
 
+  private func stopConnector() {
+    connector?.stop()
+    connector = nil
+    status = .idle
+    mode = nil
+  }
+
   private func startConnector() {
     connector?.stop()
-    guard let identity, identity.isLinked else { return }
+    connector = nil
+    guard let identity, identity.isLinked, isThingsMac else { return }
     let c = Connector(identity: identity)
     c.onStatus = { [weak self] s in
       self?.status = s
@@ -183,7 +204,16 @@ final class AppState: ObservableObject {
   }
 
   func openWebApp() {
-    if let url = URL(string: identity?.serverURL ?? serverURL) { NSWorkspace.shared.open(url) }
+    if let url = URL(string: hostedURL) { NSWorkspace.shared.open(url) }
+  }
+
+  func copy(_ text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+  }
+
+  func markOtherMacSetupShown() {
+    UserDefaults.standard.set(true, forKey: "didShowOtherMacSetup")
   }
 
   func setStartAtLogin(_ on: Bool) {
@@ -196,6 +226,7 @@ final class AppState: ObservableObject {
   }
 
   var statusText: String {
+    if !isThingsMac { return "Things isn't on this Mac · web app and AI apps only" }
     switch status {
     case .idle: return isLinked ? "Starting…" : "Not signed in"
     case .connecting: return "Connecting…"

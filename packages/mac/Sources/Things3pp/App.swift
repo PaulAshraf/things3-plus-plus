@@ -43,6 +43,7 @@ struct MenuIcon: View {
   }
 
   var symbol: String {
+    if !state.isThingsMac { return state.isLinked ? "exclamationmark.circle" : "checkmark.circle" }
     if !state.isLinked { return "checkmark.circle.badge.questionmark" }
     switch state.status {
     case .connected: return "checkmark.circle.fill"
@@ -62,7 +63,10 @@ struct MenuContent: View {
       Text("Basic mode · no checklists or headings yet")
     }
     Divider()
-    Button("Open Things on the Web") { state.openWebApp() }.disabled(!state.isLinked)
+    Button("Open Things on the Web") { state.openWebApp() }.disabled(!state.isLinked && state.isThingsMac)
+    if !state.isThingsMac {
+      Button("Copy MCP Address") { state.copy(state.mcpURL) }
+    }
     Button(state.needsSetup ? "Finish Setup…" : "Setup…") {
       NSApp.activate(ignoringOtherApps: true)
       openWindow(id: "setup")
@@ -80,6 +84,10 @@ struct SetupView: View {
   @State private var advanced = false
 
   var body: some View {
+    if state.isThingsMac { thingsMacSetup } else { OtherMacSetup().onAppear { state.markOtherMacSetupShown() } }
+  }
+
+  var thingsMacSetup: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 14) {
         Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 52, height: 52)
@@ -130,11 +138,6 @@ struct SetupView: View {
       }
       .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
       .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor).opacity(0.5)))
-
-      if !state.thingsInstalled {
-        Label("Things 3 isn't installed on this Mac.", systemImage: "exclamationmark.triangle.fill")
-          .foregroundStyle(.orange).padding(.top, 12)
-      }
 
       HStack {
         Toggle("Start at login", isOn: Binding(get: { state.startAtLogin }, set: { state.setStartAtLogin($0) }))
@@ -189,6 +192,97 @@ struct SetupView: View {
       }
       .font(.callout).padding(.horizontal, 14).padding(.bottom, 10).padding(.leading, 30)
     }
+  }
+}
+
+/// Setup for a Mac without Things: it never syncs, it uses the web app and the remote MCP.
+struct OtherMacSetup: View {
+  @EnvironmentObject var state: AppState
+  @State private var copied: String?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(spacing: 14) {
+        Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 52, height: 52)
+        VStack(alignment: .leading, spacing: 3) {
+          Text("Use Things on this Mac").font(.system(size: 20, weight: .bold))
+          Text("Things isn't installed here, so this Mac doesn't sync. Your Mac with Things does that. You can still use your to-dos here.")
+            .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      .padding(.bottom, 18)
+
+      if state.isLinked {
+        HStack(alignment: .top) {
+          Label("This Mac is signed in as a syncing Mac, but it has no Things. Sign out so it can't get in the way of your Mac with Things. The web app and AI apps keep working.", systemImage: "exclamationmark.triangle.fill")
+            .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+          Spacer(minLength: 8)
+          Button("Sign Out of This Mac") { state.signOut() }
+        }
+        .padding(.bottom, 14)
+      }
+
+      if state.cliIdentity != nil {
+        HStack(alignment: .top) {
+          Label("Terminal's things3pp is linked on this Mac too. Run “things3pp disconnect” in Terminal to unlink it.", systemImage: "exclamationmark.triangle.fill")
+            .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+          Spacer(minLength: 8)
+          Button("Copy") { state.copy("things3pp disconnect") }
+        }
+        .padding(.bottom, 14)
+      }
+
+      VStack(spacing: 0) {
+        StepRow(
+          number: 1, title: "Web app",
+          detail: "Open your hosted Things and sign in with your passkey (it syncs through iCloud Keychain, or use your iPhone).",
+          state: .todo
+        ) {
+          Button("Open Things on the Web") { state.openWebApp() }.buttonStyle(.borderedProminent)
+        }
+        Divider().padding(.leading, 44)
+        StepRow(
+          number: 2, title: "AI apps",
+          detail: "Run this in Terminal to add Things to Claude Code, Codex, Cursor and VS Code. Each app signs in with your passkey. For Claude Desktop, add the MCP address in Settings → Connectors → Add custom connector.",
+          state: .todo
+        ) { EmptyView() }
+        VStack(alignment: .leading, spacing: 8) {
+          copyRow(state.setupCommand, key: "command")
+          copyRow(state.mcpURL, key: "mcp")
+        }
+        .padding(.horizontal, 14).padding(.bottom, 14).padding(.leading, 30)
+      }
+      .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+      .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor).opacity(0.5)))
+
+      if !state.isLinked {
+        DisclosureGroup("Server") {
+          TextField("https://things.example.com", text: $state.serverURL).textFieldStyle(.roundedBorder)
+          Text("Leave as is unless you host your own (things3pp cloud deploy).").font(.caption).foregroundStyle(.secondary)
+        }
+        .font(.callout).padding(.top, 12)
+      }
+
+      HStack {
+        Toggle("Start at login", isOn: Binding(get: { state.startAtLogin }, set: { state.setStartAtLogin($0) }))
+        Spacer()
+      }
+      .padding(.top, 16)
+    }
+    .padding(24)
+  }
+
+  func copyRow(_ text: String, key: String) -> some View {
+    HStack {
+      Text(text).font(.system(.callout, design: .monospaced)).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+      Spacer(minLength: 8)
+      Button(copied == key ? "Copied" : "Copy") {
+        state.copy(text)
+        copied = key
+      }
+    }
+    .padding(8)
+    .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
   }
 }
 

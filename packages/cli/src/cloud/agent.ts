@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { c, fail, info, ok, warn } from "../cli/ui.js";
+import { thingsInstalled } from "../cli/checks.js";
 import { DatabaseError, findThingsDatabase } from "things3pp-core/things/db";
 import { loadCloudConfig } from "./config.js";
 import { Connector, requireWebSocket } from "./connector.js";
@@ -38,7 +39,20 @@ function linked() {
   return { url: cfg.url, device: cfg.device };
 }
 
+/** Explains what a Mac without Things should do instead of syncing. */
+function noThingsHelp(url: string | undefined) {
+  console.log(`  Only the Mac that has Things syncs. This Mac can still use your hosted Things:`);
+  console.log(`    • Web app: open ${c.cyan(url ?? "your hosted Things")} in your browser and sign in with your passkey.`);
+  console.log(`    • AI apps: ${c.cyan(`things3pp mcp setup --url ${url ?? "<address>"}`)}`);
+  console.log(`  If you linked this Mac by mistake, run ${c.cyan("things3pp disconnect")}.\n`);
+}
+
 export async function install(): Promise<number> {
+  if (!thingsInstalled()) {
+    fail("Things 3 isn't installed on this Mac, so there's nothing for the agent to sync.");
+    noThingsHelp(loadCloudConfig().url);
+    return 1;
+  }
   if (!linked()) {
     fail(`This Mac isn't linked yet. Run ${c.cyan("things3pp connect")} first.`);
     return 1;
@@ -89,6 +103,10 @@ export async function install(): Promise<number> {
   return 0;
 }
 
+export function isInstalled(): boolean {
+  return existsSync(plistPath());
+}
+
 export async function uninstall(): Promise<number> {
   await sh("/bin/launchctl", ["bootout", `gui/${process.getuid?.()}`, plistPath()]);
   if (existsSync(plistPath())) rmSync(plistPath());
@@ -109,12 +127,36 @@ export async function agentStatus(): Promise<number> {
   return state === "running" ? 0 : 1;
 }
 
+/** Resolves once Things is installed (checked every 5 minutes). Stops cleanly on SIGINT/SIGTERM. */
+function waitForThings(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      if (!thingsInstalled()) return;
+      clearInterval(timer);
+      process.off("SIGINT", quit);
+      process.off("SIGTERM", quit);
+      resolve();
+    }, 5 * 60_000);
+    const quit = () => process.exit(0);
+    process.on("SIGINT", quit);
+    process.on("SIGTERM", quit);
+  });
+}
+
 export async function run(): Promise<number> {
   requireWebSocket();
   const link = linked();
   if (!link) {
     fail(`This Mac isn't linked yet. Run ${c.cyan("things3pp connect")} first.`);
     return 1;
+  }
+  if (!thingsInstalled()) {
+    // A Mac without Things must never sync: it would take the connection away from the Mac that has
+    // Things, and changes from the web app and AI apps would fail. Wait quietly in case Things arrives.
+    warn("Things 3 isn't installed on this Mac, so it won't sync. Waiting until Things is installed.");
+    noThingsHelp(link.url);
+    await waitForThings();
+    ok("Things 3 is installed now. Starting to sync.");
   }
   try {
     findThingsDatabase();

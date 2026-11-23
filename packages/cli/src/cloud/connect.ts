@@ -103,7 +103,10 @@ export async function disconnect(): Promise<number> {
   }
   delete cfg.device;
   saveCloudConfig(cfg);
+  // Without a link the background agent has nothing to do, so stop it too.
+  const { uninstall, isInstalled } = await import("./agent.js");
+  if (isInstalled()) await uninstall();
   ok("Unlinked this Mac. Its device key is deleted.");
-  warn(`Also remove it from the list in Settings on ${cfg.url ?? "your hosted Things"}, and run "things3pp agent uninstall" if you installed the agent.`);
+  info(`Also remove it from the list in Settings on ${cfg.url ?? "your hosted Things"}.`);
   return 0;
 }
